@@ -1,0 +1,30 @@
+# Build output
+node_modules/
+out/
+dist/
+*.tsbuildinfo
+
+# Vibe runtime state (never commit worktrees or agent state)
+.vibe/worktrees/
+.vibe/agents/
+
+# Secrets — Vibe stores API keys in Electron userData, NOT here. But guard anyway.
+.env
+.env.*
+config.local.json
+*.pem
+*.key
+secrets/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local Claude Code state
+.claude/
