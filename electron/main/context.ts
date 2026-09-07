@@ -45,8 +45,12 @@ diff and merges it into main.
 - \`run_bash(command)\` — run a short shell command. IMPORTANT: On Windows, the
   shell is PowerShell 5.1, which does NOT support \`&&\` or \`||\` chaining. Use
   \`;\` to chain, or run one command per call. On macOS/Linux the shell is bash.
-- \`finish(summary)\` — call this when the task is complete, with a short summary
-  of what changed for the human reviewer.
+- \`ask_human(question)\` — use this when you need input to proceed (ambiguous
+  task, unexpected result, decision needed). The loop pauses until the human
+  replies. Do NOT bundle questions into \`finish\`.
+- \`finish(summary)\` — call ONLY when the task is complete AND you have no open
+  questions. Provide a short summary of what changed. If you still have
+  questions, call \`ask_human\` instead.
 
 ## Boundaries
 - Do NOT \`cd\` out of your worktree. All work stays inside your worktree root.
@@ -86,6 +90,12 @@ export async function ensureContextFile(workspacePath: string): Promise<string> 
     await mkdir(vibeDir, { recursive: true })
     await writeFile(contextPath, DEFAULT_CONTEXT, 'utf8')
   }
+  // Also seed the workspace-level AGENTS.md so users can customize per-project.
+  const agentsMdPath = path.join(workspacePath, '.vibe', 'AGENTS.md')
+  if (!existsSync(agentsMdPath)) {
+    await mkdir(path.join(workspacePath, '.vibe'), { recursive: true })
+    await writeFile(agentsMdPath, DEFAULT_AGENTS_MD, 'utf8')
+  }
   return contextPath
 }
 
@@ -97,6 +107,43 @@ export async function readContext(workspacePath: string): Promise<string> {
 export async function writeContext(workspacePath: string, content: string): Promise<void> {
   const p = await ensureContextFile(workspacePath)
   await writeFile(p, content, 'utf8')
+}
+
+const DEFAULT_SUMMARY = `# Project Summary (auto-maintained)
+
+This file is maintained by the PM agent. It gets rewritten after each merge to
+reflect the current state of the project. Do not edit manually — your changes
+will be overwritten.
+
+_No summary generated yet. This file will populate after the first merge, or when
+you click "Regenerate now" in the Summary tab._
+`
+
+async function ensureSummaryFile(workspacePath: string): Promise<string> {
+  const p = path.join(workspacePath, '.vibe', 'context', 'summary.md')
+  if (!existsSync(p)) {
+    await mkdir(path.dirname(p), { recursive: true })
+    await writeFile(p, DEFAULT_SUMMARY, 'utf8')
+  }
+  return p
+}
+
+export async function readSummary(workspacePath: string): Promise<string> {
+  const p = await ensureSummaryFile(workspacePath)
+  return readFile(p, 'utf8')
+}
+
+export async function writeSummary(workspacePath: string, content: string): Promise<void> {
+  const p = await ensureSummaryFile(workspacePath)
+  await writeFile(p, content, 'utf8')
+}
+
+export async function summaryLastModified(workspacePath: string): Promise<string | null> {
+  const p = path.join(workspacePath, '.vibe', 'context', 'summary.md')
+  if (!existsSync(p)) return null
+  const { stat } = await import('node:fs/promises')
+  const s = await stat(p)
+  return s.mtime.toISOString()
 }
 
 export async function readAgentsGuide(workspacePath: string): Promise<string> {

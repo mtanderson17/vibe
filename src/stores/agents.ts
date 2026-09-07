@@ -1,11 +1,13 @@
 import { create } from 'zustand'
-import type { AgentState, AgentEvent, Message, ToolCall } from '@/types'
+import type { AgentState, AgentEvent, Message, ToolCall, TokenUsage } from '@/types'
 
 interface AgentsStore {
   agents: Record<string, AgentState>
   focused: string
   setFocused: (id: string) => void
   hydrate: (list: AgentState[]) => void
+  addAgent: (agent: AgentState) => void
+  removeAgent: (id: string) => void
   applyEvent: (event: AgentEvent) => void
 }
 
@@ -14,13 +16,19 @@ function emptyAgent(id: string): AgentState {
 }
 
 export const useAgents = create<AgentsStore>((set) => ({
-  agents: { 'agent-1': emptyAgent('agent-1'), 'agent-2': emptyAgent('agent-2') },
+  agents: {},
   focused: 'agent-1',
   setFocused: (id) => set({ focused: id }),
   hydrate: (list) => set(state => {
     const next = { ...state.agents }
     for (const a of list) next[a.id] = a
     return { agents: next }
+  }),
+  addAgent: (agent) => set(state => ({ agents: { ...state.agents, [agent.id]: agent } })),
+  removeAgent: (id) => set(state => {
+    const next = { ...state.agents }
+    delete next[id]
+    return { agents: next, focused: state.focused === id ? '' : state.focused }
   }),
   applyEvent: (event) => set(state => {
     const a = state.agents[event.agentId] ?? emptyAgent(event.agentId)
@@ -42,6 +50,33 @@ export const useAgents = create<AgentsStore>((set) => ({
         updated.messages.push(event.data as Message)
         break
       }
+      case 'stream_start': {
+        // Push a placeholder assistant message we'll append to as deltas arrive
+        updated.messages.push({ role: 'assistant', content: '', servedBy: undefined })
+        break
+      }
+      case 'stream_delta': {
+        const lastIdx = updated.messages.length - 1
+        const last = updated.messages[lastIdx]
+        if (last && last.role === 'assistant') {
+          updated.messages[lastIdx] = {
+            ...last,
+            content: (last.content ?? '') + (event.data as string)
+          }
+        }
+        break
+      }
+      case 'stream_end': {
+        // Replace the streaming placeholder with the final fully-parsed message
+        const final = event.data as Message
+        const lastIdx = updated.messages.length - 1
+        if (lastIdx >= 0 && updated.messages[lastIdx].role === 'assistant') {
+          updated.messages[lastIdx] = final
+        } else {
+          updated.messages.push(final)
+        }
+        break
+      }
       case 'tool_call':
         // Rendering handled via the assistant message that included it
         break
@@ -59,6 +94,15 @@ export const useAgents = create<AgentsStore>((set) => ({
         updated.error = event.data as string
         updated.status = 'error'
         break
+      case 'usage':
+        updated.usage = event.data as TokenUsage
+        break
+      case 'step': {
+        const s = event.data as { step: number; max: number }
+        updated.step = s.step
+        updated.maxSteps = s.max
+        break
+      }
       case 'done':
         break
     }

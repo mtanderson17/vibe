@@ -1,136 +1,174 @@
 # Vibe
 
-A command center for agent-driven development. Not another IDE with AI bolted on — a workspace built from the ground up for orchestrating multiple coding agents on one codebase.
+**A command center for agent-driven development.** Not another IDE with AI bolted on — a workspace built from the ground up to orchestrate many coding agents on one codebase.
 
-**Status:** proof of concept. Two hardcoded agents, git worktree isolation, shared context injection, manual merge review. Everything else is scope for v1.
+Free forever, open source, works out of the box with FOSS models.
 
-## Guiding Principles
+## Why
 
-- **FOSS first, paid later.** Vibe starts free out of the box using free-tier FOSS models via OpenRouter. Bring your own key when you want frontier quality.
-- **Command center, not IDE.** The human is an orchestrator. The UI reflects that.
-- **Coordination is the hard part.** Multiple agents on one codebase requires isolation (git worktrees), shared context, and structured merges. That's the core problem Vibe solves.
+Modern coding is drifting from "human writes code" to "human directs agents." Existing tools handle one agent at a time, in a chat sidebar next to an editor designed for solo humans. Vibe flips that: agents are the workflow, and the UI is a mission control for supervising them.
 
-## Requirements
+**Guiding principles:**
 
-- Node.js 20+
-- Git 2.5+ (for `git worktree`)
-- An [OpenRouter](https://openrouter.ai) API key (free signup, no card required)
+- **FOSS-first.** Vibe works with zero cost from day one — free-tier OpenRouter models or local Ollama. Bring paid keys when the task warrants it.
+- **Command center, not IDE.** The human orchestrates. No tab-completion, no Copilot-style ghost text. Different tool for different work.
+- **Isolation is free.** Each agent runs in its own git worktree on its own branch. No stepping on each other's files.
+- **The human stays in control.** Every merge, every proposed task, every context update gets human review.
 
-## Getting Started
+## Quick start (60 seconds)
+
+Requires Node 20+ and Git 2.5+.
 
 ```bash
+git clone <this repo>
+cd vibe
 npm install
 npm run dev
 ```
 
 On first launch:
-1. Paste your OpenRouter API key
-2. Pick a workspace folder (a git repo will be initialized if needed)
-3. Pick a default model (Qwen2.5-Coder-32B free is a good default)
+1. Paste an OpenRouter API key ([free signup, no card](https://openrouter.ai))
+2. Click **Test free models** — Vibe probes which are currently live for your account and picks working ones
+3. Pick a workspace folder (a git repo will be initialized if needed)
+4. Click **Start**
 
-Then:
-- Give **agent-1** and **agent-2** each a task
-- Watch them work in their own git worktrees on their own branches
-- Review the diff and click Merge when done
-- Edit the shared **context** tab to give both agents shared project knowledge
+Then in Control Center: **+ agent** → give it a task → watch it work.
+
+**No key at all?** If you have [Ollama](https://ollama.com) installed with a tool-capable model (llama3.1, llama3.2, qwen2.5-coder), Vibe auto-detects it on setup. You can set the model to `ollama/<name>` and skip the API key.
+
+## The three onboarding paths
+
+| Path | Cost | Setup | Best for |
+|---|---|---|---|
+| **OpenRouter free** | $0 (50 req/day cap) | Paste one key | Trying Vibe out |
+| **Local Ollama** | $0 (no cap) | Install Ollama, pull a model | Privacy, offline, unlimited use |
+| **OpenRouter paid / BYO frontier key** | Real dollars | Same key + credit | Serious work, frontier quality |
+
+## What ships in v0.2
+
+**Core**
+- Up to 8 concurrent agents, each in its own git worktree + branch
+- Multi-turn conversation with agents (`ask_human` tool, follow-up during `awaiting_merge`)
+- Kill/interrupt running agents
+- Streaming responses via SSE
+- Sibling awareness (agents know what other agents are working on)
+- Per-task model pinning (no mid-loop model chaos)
+- Persisted agent state across restarts
+
+**Provider stack**
+- OpenAI-compatible adapter routes to OpenRouter, Ollama, or any compatible endpoint
+- Fallback chains (`openrouter/free,minimax/minimax-m3:free`) with automatic failover
+- On-startup probe: tests which free models actually work for your account
+- Friendly error messages for common failures (rate limits, deprecated models, CUDA crashes)
+
+**AI-assisted merges**
+- Merge conflict resolution agent with inline diff view (before/after per file, syntax-highlighted markers)
+- File overlap warnings before merge (against sibling agent branches)
+
+**Project management (PM) agent**
+- Runs automatically after every merge to update `.vibe/context/summary.md`
+- Proposes follow-up tasks based on observed changes (human accepts/dismisses)
+- Chat with it directly from the Tasks screen
+- Its summary is injected into every agent's prompt — shared, current project state
+
+**Workspace hygiene**
+- Auto-seeded workspace `.gitignore` (excludes secrets, `.vibe/worktrees/`, bytecode, deps)
+- Auto-seeded workspace `.vibe/AGENTS.md` (per-project customization)
+- Dependency isolation guidance for agents (create venvs, avoid global installs)
+
+**UI**
+- Sidebar nav: Control Center · Tasks · Cost · Context · Settings
+- Control Center grid: all agents at a glance, click any tile to focus
+- Tasks kanban: Backlog / In Progress / Awaiting Merge / Done + Proposed row
+- Cost view: per-agent token counts and estimated dollars, sourced from OpenRouter pricing
+- Context tabs: Project (human-owned) | Summary (PM-maintained)
 
 ## Architecture
 
-- **Electron main process** — LLM API calls, git operations, file system, tool execution
-- **Preload** — narrow IPC bridge (`window.vibe.*`)
-- **Renderer (React + Zustand)** — UI only, subscribes to agent event streams
+```
+┌─────────────────────────────────────────────────┐
+│  Renderer (React + Zustand)                     │
+│  - Sidebar, Control Center, Agent panels        │
+│  - Tasks kanban, Cost, Context tabs             │
+│  - Never touches disk or network directly       │
+└─────────────────┬───────────────────────────────┘
+                  │ IPC (contextBridge)
+┌─────────────────▼───────────────────────────────┐
+│  Electron main process                          │
+│  - Agent lifecycle (spawn, kill, close)         │
+│  - Git worktrees (create, merge, cleanup)       │
+│  - Provider adapters (OpenRouter, Ollama)       │
+│  - PM agent (post-merge summary + task propose) │
+│  - Merge conflict resolver                      │
+│  - Persistence (.vibe/agents/*.json)            │
+└─────────────────────────────────────────────────┘
+```
 
-Each agent runs in an isolated `git worktree` at `.vibe/worktrees/<agent-id>/` on a branch named `vibe/<agent-id>/<task-slug>`. The shared context file at `.vibe/context/project.md` is prepended to every agent's system prompt.
+Each user workspace has:
+```
+your-project/
+├── .git/
+├── .gitignore              # seeded by Vibe on first init
+├── src/, tests/, etc.      # your actual code
+└── .vibe/
+    ├── AGENTS.md           # per-project agent conventions
+    ├── context/
+    │   ├── project.md      # human-owned project brief
+    │   └── summary.md      # PM-maintained running state
+    ├── tasks.json          # kanban backing store
+    ├── agents/             # persisted agent state (chat, task, branch)
+    └── worktrees/          # git worktrees per agent (gitignored)
+```
 
-## Tools Available to Agents
+## Development
 
-- `read_file(path)` — path relative to worktree root
-- `write_file(path, content)`
-- `list_files(path)`
-- `run_bash(command)` — runs inside the agent's worktree
-- `finish(summary)` — signals task completion
-
-## What's Not Here Yet
-
-- More than 2 agents (design supports up to 16, PoC hardcodes 2)
-- Model routing (RouteLLM integration)
-- Ollama support
-- Merge conflict resolution agent
-- Project management screen
-- Cost management screen
-- Command palette
-- Monaco editor
-- Streaming responses
-- Persisted agent state across restarts (chat/branch mapping lost on close)
-- **Pause / interrupt / kill an in-flight agent** — currently agents run to completion
-  or step limit once started; there's no stop button. Needed for when an agent goes
-  off the rails or the human wants to redirect mid-loop.
-- **Meta-chat during awaiting_merge** — no way to ask a status question without
-  spawning a new task branch. Should be able to chat with the agent about its work
-  without kicking off new work.
-- **Short branch/task slugs** — currently branch names are the first N chars of the
-  prompt. v1 should use a cheap model to summarize into a real slug (e.g.
-  "add-pause" instead of "okay-add-the-pause-feature").
-- **Awareness of concurrent agents' work** — agents branch from main without any
-  hint of what other agents are actively working on. Sibling in-flight branches
-  should be visible in each agent's system prompt (or at minimum, a warning
-  before merge if their file set overlaps a sibling's).
-- **Router coherence** — free-tier routing picks a different model per turn,
-  causing redundant re-reads and inconsistent style within a single agent loop.
-  Should pin the model for the duration of a task once the first turn commits
-  to one.
-
-## Dependency isolation
-
-Vibe uses **convention-based isolation** — the bundled AGENTS.md instructs agents
-to always create per-worktree virtualenvs (Python) and prefer project-local
-package managers (Node, Cargo, Go). Agents share the host machine and can, in
-principle, install packages globally if they ignore instructions. Use a scratch
-workspace when trying new tasks.
-
-**Planned for BYOC (bring-your-own-compute):** container-per-agent isolation.
-When Vibe adds remote/VM runtime support in a future version, each agent will
-run in its own container, giving hard isolation for free.
+```bash
+npm run dev         # Electron dev with hot reload
+npm run build       # Production build
+npm run typecheck   # tsc across main + renderer
+npm test            # Node's built-in test runner via tsx
+```
 
 ## Security
 
-**Where your API key lives.** OpenRouter API keys are stored via
-[`electron-store`](https://github.com/sindresorhus/electron-store) inside
-Electron's per-user data directory:
+**API keys** live in Electron's per-user data directory (`%APPDATA%\vibe\config.json` on Windows, `~/Library/Application Support/vibe/config.json` on macOS), unencrypted. Outside the project folder so they won't be committed. Migration to OS-level credential storage (`safeStorage`) is on the roadmap.
 
-- **Windows**: `%APPDATA%\vibe\config.json`
-- **macOS**: `~/Library/Application Support/vibe/config.json`
-- **Linux**: `~/.config/vibe/config.json`
+**Agents run unsandboxed.** `run_bash` executes arbitrary commands in the agent's worktree. Vibe blocks path escapes for `read_file`/`write_file` but does not sandbox `run_bash`. Use a scratch workspace when trying tasks; don't point Vibe at folders with production secrets. Container-per-agent isolation is planned for the BYOC (bring-your-own-compute) roadmap.
 
-The file is plain JSON — not encrypted at rest. It sits outside your project
-folder, so it will not be committed by accident. But anyone with read access to
-your user account can see the key.
+**What never gets committed:** the auto-seeded workspace `.gitignore` excludes `.env`, `*.pem`, `*.key`, common secret patterns, and `.vibe/worktrees/`. Review it before adding sensitive files.
 
-**Planned for v1**: migrate to Electron's
-[`safeStorage`](https://www.electronjs.org/docs/latest/api/safe-storage) API, which
-uses OS-level credential stores (DPAPI on Windows, Keychain on macOS, kwallet/gnome-libsecret
-on Linux). Until then, treat your Vibe API key with the same care as an SSH key.
+## Roadmap
 
-**What agents can do on your machine.** Vibe agents have `run_bash` access,
-which means they can execute arbitrary shell commands inside their worktree.
-They are **not sandboxed** — a compromised model or a prompt-injection attack in
-a file they read could in principle:
+**Near term**
+- Container-per-agent isolation for `run_bash` sandboxing
+- Encrypted key storage via Electron's `safeStorage`
+- Ollama model badges in setup (mark which support tool calling)
+- Playwright-driven UI tests
+- Command palette (Cmd+K)
 
-- Read files outside the worktree (the tool blocks path escapes, but `run_bash` can `cat` anything)
-- Install global packages, modify PATH, write to `~/`, etc.
-- Make outbound network requests
+**Mid term**
+- Bring-your-own-compute (BYOC): run agents on user-provided VMs
+- Automatic model routing (cheap for simple tasks, frontier for complex — via RouteLLM or similar)
+- Monaco editor pane for inline code review during agent turns
+- Streaming Ollama support (currently only OpenRouter streams)
+- Auto-linking task cards to agent branches/commits
 
-Use a scratch workspace for experiments. Do NOT point Vibe at a folder
-containing production secrets or credentials. Container-per-agent isolation
-(see roadmap) will address this.
+**Longer term**
+- Vibe Cloud (optional hosted agents for walk-away work — freemium tier, core stays free)
+- Team collaboration (shared workspaces, real-time agent visibility)
+- Agent specialization ("droids" — reviewer, test-writer, refactorer with pre-baked prompts)
+- Agent Client Protocol (ACP) support to orchestrate external CLIs like Claude Code / Codex alongside native agents
 
-**What NEVER gets committed.** The auto-generated workspace `.gitignore`
-excludes `.vibe/worktrees/`, `.vibe/agents/`, common secret files (`.env`,
-`*.pem`, `*.key`), and language-specific caches. Review it before adding
-sensitive files to a Vibe workspace.
+## Contributing
 
-**Reporting security issues.** For anything sensitive, open a private security
-advisory on the repo rather than a public issue.
+PRs welcome. Small changes: open a PR. Larger changes or new features: file an issue first so we can align on approach before you invest time.
+
+Testing:
+```bash
+npm test            # runs the whole suite
+npm run typecheck   # verify types compile
+npm run build       # verify production build
+```
 
 ## License
 

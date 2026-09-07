@@ -17,11 +17,17 @@ export interface Message {
 
 export interface AgentEvent {
   agentId: string
-  type: 'status' | 'message' | 'tool_call' | 'tool_result' | 'error' | 'done'
+  type: 'status' | 'message' | 'tool_call' | 'tool_result' | 'error' | 'done' | 'usage' | 'stream_start' | 'stream_delta' | 'stream_end' | 'step'
   data: unknown
 }
 
 export type AgentStatus = 'idle' | 'running' | 'awaiting_input' | 'awaiting_merge' | 'merged' | 'error'
+
+export interface TokenUsage {
+  prompt: number
+  completion: number
+  total: number
+}
 
 export interface AgentState {
   id: string
@@ -32,6 +38,9 @@ export interface AgentState {
   messages: Message[]
   error?: string
   pinnedModel?: string
+  usage?: TokenUsage
+  step?: number
+  maxSteps?: number
 }
 
 export interface Config {
@@ -39,4 +48,5 @@ export interface Config {
   openrouterApiKey: string | null
   model: string
   maxSteps: number
+  agentCount: number
 }

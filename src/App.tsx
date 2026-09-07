@@ -1,71 +1,164 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import type { Config } from './types'
 import { useAgents } from './stores/agents'
 import Setup from './Setup'
 import AgentPanel from './AgentPanel'
 import ContextView from './ContextView'
+import CostView from './CostView'
+import TasksView from './TasksView'
+import ControlCenter from './ControlCenter'
+import Icon, { type IconName } from './Icon'
 
-type View = 'agent-1' | 'agent-2' | 'context' | 'settings'
+type SidebarView = 'control' | 'tasks' | 'cost' | 'context' | 'settings'
 
 export default function App() {
   const [config, setConfig] = useState<Config | null>(null)
-  const [view, setView] = useState<View>('agent-1')
+  const [sidebarView, setSidebarView] = useState<SidebarView>('control')
+  const [focusedAgent, setFocusedAgent] = useState<string | null>(null)
   const agents = useAgents(s => s.agents)
   const applyEvent = useAgents(s => s.applyEvent)
+  const hydrate = useAgents(s => s.hydrate)
+  const addAgent = useAgents(s => s.addAgent)
+  const removeAgent = useAgents(s => s.removeAgent)
 
   useEffect(() => {
     window.vibe.config.get().then(setConfig)
   }, [])
 
   useEffect(() => {
+    window.vibe.agents.list().then(list => {
+      if (list?.length) hydrate(list)
+    })
+  }, [hydrate, config?.workspacePath])
+
+  useEffect(() => {
     const off = window.vibe.onAgentEvent(applyEvent)
     return off
   }, [applyEvent])
 
+  const agentIds = useMemo(() => {
+    return Object.keys(agents).sort((a, b) => {
+      const na = parseInt(a.replace(/\D/g, '')) || 0
+      const nb = parseInt(b.replace(/\D/g, '')) || 0
+      return na - nb
+    })
+  }, [agents])
+
+  const atAgentCap = agentIds.length >= (config?.agentCount ?? 4)
+
+  async function handleSpawn() {
+    if (atAgentCap) return
+    const newAgent = await window.vibe.agents.spawn()
+    addAgent(newAgent)
+    setFocusedAgent(newAgent.id)
+    setSidebarView('control')
+  }
+
+  async function handleClose(id: string) {
+    const a = agents[id]
+    // Confirm if the agent has real state
+    if (a && (a.messages.length > 0 || a.status !== 'idle')) {
+      if (!confirm(`Close ${id}? Any in-flight work, worktree, and branch will be cleaned up.`)) return
+    }
+    await window.vibe.agents.close(id)
+    removeAgent(id)
+    if (focusedAgent === id) setFocusedAgent(null)
+  }
+
   if (!config) return null
 
-  if (!config.workspacePath || !config.openrouterApiKey) {
+  const missingCreds = !config.workspacePath || (!config.openrouterApiKey && !config.model.startsWith('ollama/'))
+  if (missingCreds) {
     return <Setup config={config} onSaved={setConfig} />
   }
 
-  if (view === 'settings') {
-    return <Setup config={config} onSaved={(c) => { setConfig(c); setView('agent-1') }} />
+  if (sidebarView === 'settings') {
+    return <Setup config={config} onSaved={(c) => { setConfig(c); setSidebarView('control') }} />
   }
 
   return (
-    <div className="app">
-      <div className="topbar">
-        <div className="brand">VIBE</div>
-        <div className="tabs">
-          {(['agent-1', 'agent-2'] as const).map(id => (
-            <div
-              key={id}
-              className={`tab ${view === id ? 'active' : ''}`}
-              onClick={() => setView(id)}
-            >
-              <span className={`status-dot status-${agents[id]?.status ?? 'idle'}`} />
-              {id}
-            </div>
-          ))}
-          <div
-            className={`tab ${view === 'context' ? 'active' : ''}`}
-            onClick={() => setView('context')}
-          >
-            context
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="sidebar-brand">VIBE</div>
+        <div className="sidebar-nav">
+          <SidebarItem icon="grid" label="Control Center" active={sidebarView === 'control'} onClick={() => { setSidebarView('control'); setFocusedAgent(null) }} />
+          <SidebarItem icon="list" label="Tasks" active={sidebarView === 'tasks'} onClick={() => { setSidebarView('tasks'); setFocusedAgent(null) }} />
+          <SidebarItem icon="coin" label="Cost" active={sidebarView === 'cost'} onClick={() => { setSidebarView('cost'); setFocusedAgent(null) }} />
+          <SidebarItem icon="note" label="Context" active={sidebarView === 'context'} onClick={() => { setSidebarView('context'); setFocusedAgent(null) }} />
+        </div>
+        <div className="sidebar-footer">
+          <button onClick={() => setSidebarView('settings')} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <Icon name="settings" size={14} />
+            <span>Settings</span>
+          </button>
+          <div className="sidebar-workspace" title={config.workspacePath ?? ''}>
+            {config.workspacePath?.split(/[\\/]/).slice(-2).join('/')}
           </div>
         </div>
-        <div className="spacer" />
-        <div className="meta">
-          {config.model} · {config.workspacePath}
-        </div>
-        <button onClick={() => setView('settings')}>Settings</button>
-      </div>
+      </aside>
 
-      <div style={{ flex: 1, overflow: 'hidden' }}>
-        {view === 'agent-1' && <AgentPanel agentId="agent-1" />}
-        {view === 'agent-2' && <AgentPanel agentId="agent-2" />}
-        {view === 'context' && <ContextView />}
-      </div>
+      <main className="main">
+        {sidebarView === 'control' && (
+          <>
+            <div className="agent-tabbar">
+              {agentIds.map(id => (
+                <div
+                  key={id}
+                  className={`agent-tab ${focusedAgent === id ? 'active' : ''}`}
+                  onClick={() => setFocusedAgent(id)}
+                >
+                  <span className={`status-dot status-${agents[id]?.status ?? 'idle'}`} />
+                  <span className="agent-tab-label">{id}</span>
+                  <button
+                    className="agent-tab-close"
+                    title="Close agent"
+                    onClick={(e) => { e.stopPropagation(); handleClose(id) }}
+                  >×</button>
+                </div>
+              ))}
+              <button
+                className="agent-tab-add"
+                onClick={handleSpawn}
+                disabled={atAgentCap}
+                title={atAgentCap ? `Reached max of ${config.agentCount} agents (change in Settings)` : 'Add agent'}
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                {atAgentCap ? `max ${config.agentCount}` : <><Icon name="plus" size={12} /> agent</>}
+              </button>
+              {focusedAgent && (
+                <button className="agent-tab-grid" onClick={() => setFocusedAgent(null)} title="Show all agents">
+                  ⊞ show all
+                </button>
+              )}
+            </div>
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              {focusedAgent && agents[focusedAgent]
+                ? <AgentPanel agentId={focusedAgent} />
+                : <ControlCenter
+                    agentIds={agentIds}
+                    onFocus={setFocusedAgent}
+                    onSpawn={handleSpawn}
+                    onClose={handleClose}
+                    atCap={atAgentCap}
+                    maxAgents={config.agentCount}
+                  />
+              }
+            </div>
+          </>
+        )}
+        {sidebarView === 'tasks' && <TasksView agentIds={agentIds} />}
+        {sidebarView === 'cost' && <CostView agentIds={agentIds} />}
+        {sidebarView === 'context' && <ContextView />}
+      </main>
+    </div>
+  )
+}
+
+function SidebarItem({ icon, label, active, onClick }: { icon: IconName; label: string; active: boolean; onClick: () => void }) {
+  return (
+    <div className={`sidebar-item ${active ? 'active' : ''}`} onClick={onClick}>
+      <span className="sidebar-icon"><Icon name={icon} size={16} /></span>
+      <span>{label}</span>
     </div>
   )
 }

@@ -75,8 +75,20 @@ export const TOOL_SCHEMAS = [
   {
     type: 'function',
     function: {
+      name: 'ask_human',
+      description: 'Ask the human a clarifying question and stop for their reply. Use this whenever you need input before continuing (ambiguous task, unexpected result, decision needed). Do NOT use `finish` if you still have questions.',
+      parameters: {
+        type: 'object',
+        properties: { question: { type: 'string' } },
+        required: ['question']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'finish',
-      description: 'Call when the task is complete. Provide a short summary of what was done for the human reviewer.',
+      description: 'Call ONLY when the task is fully complete and you have no open questions. Provide a short summary for the human reviewer. If you have questions, use `ask_human` instead.',
       parameters: {
         type: 'object',
         properties: { summary: { type: 'string' } },
@@ -147,6 +159,9 @@ export async function executeTool(
         )
         if (agentId) trackChildProcess(agentId, child)
       })
+    }
+    case 'ask_human': {
+      return `Question posted to human. Waiting for reply.`
     }
     case 'finish': {
       return `Task finished: ${args.summary}`

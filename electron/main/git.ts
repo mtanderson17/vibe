@@ -145,3 +145,14 @@ export async function deleteBranch(workspacePath: string, branch: string): Promi
     await git(workspacePath, ['branch', '-D', branch])
   } catch { /* ignore */ }
 }
+
+// Files changed on `branch` compared to its merge-base with the default branch (main/master).
+export async function branchChangedFiles(workspacePath: string, branch: string, base = 'HEAD'): Promise<string[]> {
+  try {
+    const mergeBase = await git(workspacePath, ['merge-base', base, branch]).catch(() => base)
+    const out = await git(workspacePath, ['diff', '--name-only', `${mergeBase}...${branch}`])
+    return out.split('\n').map(l => l.trim()).filter(Boolean)
+  } catch {
+    return []
+  }
+}

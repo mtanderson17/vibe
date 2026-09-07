@@ -17,6 +17,12 @@ export interface Message {
 
 export type AgentStatus = 'idle' | 'running' | 'awaiting_input' | 'awaiting_merge' | 'merged' | 'error'
 
+export interface TokenUsage {
+  prompt: number
+  completion: number
+  total: number
+}
+
 export interface AgentState {
   id: string
   status: AgentStatus
@@ -26,6 +32,9 @@ export interface AgentState {
   messages: Message[]
   error?: string
   pinnedModel?: string
+  usage?: TokenUsage
+  step?: number
+  maxSteps?: number
 }
 
 export interface Config {
@@ -33,11 +42,12 @@ export interface Config {
   openrouterApiKey: string | null
   model: string
   maxSteps: number
+  agentCount: number
 }
 
 export interface AgentEvent {
   agentId: string
-  type: 'status' | 'message' | 'tool_call' | 'tool_result' | 'error' | 'done'
+  type: 'status' | 'message' | 'tool_call' | 'tool_result' | 'error' | 'done' | 'usage' | 'stream_start' | 'stream_delta' | 'stream_end' | 'step'
   data: unknown
 }
 
@@ -48,6 +58,38 @@ declare global {
         get: () => Promise<Config>
         set: (p: Partial<Config>) => Promise<Config>
       }
+      probe: {
+        openrouter: (apiKey: string) => Promise<Array<{
+          slug: string
+          status: 'ok' | 'rate_limited' | 'paid_only' | 'unavailable' | 'error'
+          message?: string
+          contextLength?: number
+        }>>
+        ollama: () => Promise<{
+          available: boolean
+          baseUrl: string
+          models: Array<{ name: string; size?: number }>
+          error?: string
+        }>
+      }
+      models: {
+        pricing: () => Promise<Record<string, { prompt: number; completion: number }>>
+      }
+      tasks: {
+        list: () => Promise<Array<{ id: string; title: string; description?: string; status: string; assignedTo?: string | null; branch?: string | null; proposed?: boolean; proposedBy?: string; createdAt: string; updatedAt: string }>>
+        create: (title: string, description?: string) => Promise<{ id: string }>
+        update: (id: string, patch: Record<string, unknown>) => Promise<unknown>
+        delete: (id: string) => Promise<void>
+        assignToAgent: (taskId: string, agentId: string) => Promise<{ ok: boolean }>
+      }
+      pm: {
+        state: () => Promise<{ status: 'idle' | 'running' | 'error'; lastRun: string | null; lastTrigger: 'merge' | 'manual' | 'chat' | null; messages: Message[]; error?: string; usage?: TokenUsage; pinnedModel?: string }>
+        run: (trigger: 'manual' | 'chat', userInput?: string) => Promise<{ ok: boolean }>
+        clear: () => Promise<{ ok: boolean }>
+        readSummary: () => Promise<string>
+        lastModified: () => Promise<string | null>
+      }
+      onPmEvent: (cb: (event: { type: string; data: unknown }) => void) => () => void
       workspace: { pick: () => Promise<string | null> }
       context: {
         read: () => Promise<string>
@@ -57,9 +99,12 @@ declare global {
         list: () => Promise<AgentState[]>
         get: (id: string) => Promise<AgentState | undefined>
         ensure: (id: string) => Promise<AgentState>
+        spawn: () => Promise<AgentState>
+        close: (id: string) => Promise<{ ok: boolean }>
         start: (id: string, task: string) => Promise<{ ok: boolean }>
         continue: (id: string, input: string) => Promise<{ ok: boolean }>
         kill: (id: string) => Promise<{ ok: boolean }>
+        checkOverlap: (id: string) => Promise<{ own: string[]; overlaps: Record<string, string[]> }>
         merge: (id: string) => Promise<{ ok: boolean; conflicts: string[]; output: string }>
         abortMerge: () => Promise<void>
         resolveConflicts: (id: string, files: string[]) => Promise<{

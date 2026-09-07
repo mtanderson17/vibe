@@ -1,10 +1,15 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'node:path'
 import { getConfig, setConfig } from './config'
-import { ensureRepo, mergeBranch, abortMerge, removeWorktree, deleteBranch } from './git'
+import { ensureRepo, mergeBranch, abortMerge, removeWorktree, deleteBranch, branchChangedFiles } from './git'
 import { resolveConflicts, applyResolution, commitResolution } from './resolver'
+import { probeOpenRouterFree, detectOllama } from './probe'
+import { loadTasks, createTask, updateTask, deleteTask } from './tasks'
+import { runPmAgent, getPmState, clearPmChat, bindPmSender } from './pmagent'
+import { readSummary, writeSummary, summaryLastModified } from './context'
 import { readContext, writeContext } from './context'
-import { bindSender, startAgent, continueAgent, killAgent, listAgents, ensureAgent, getAgent, emit } from './agent'
+import { bindSender, startAgent, continueAgent, killAgent, listAgents, ensureAgent, getAgent, emit, hydrateAgentsFromWorkspace, spawnAgent, closeAgent } from './agent'
+import { deleteAgentFile } from './persistence'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -21,6 +26,13 @@ async function createWindow(): Promise<void> {
   })
 
   bindSender(mainWindow.webContents)
+  bindPmSender(mainWindow.webContents)
+
+  // Hydrate persisted agents before renderer loads
+  const cfg = getConfig()
+  if (cfg.workspacePath) {
+    await hydrateAgentsFromWorkspace(cfg.workspacePath).catch(err => console.error('[vibe] hydrate failed', err))
+  }
 
   if (process.env.ELECTRON_RENDERER_URL) {
     await mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
@@ -45,6 +57,76 @@ app.on('window-all-closed', () => {
 function registerIpc(): void {
   ipcMain.handle('config:get', () => getConfig())
   ipcMain.handle('config:set', (_e, partial) => setConfig(partial))
+
+  ipcMain.handle('probe:openrouter', async (_e, apiKey: string) => probeOpenRouterFree(apiKey))
+  ipcMain.handle('probe:ollama', async () => detectOllama())
+
+  // PM agent
+  ipcMain.handle('pm:state', () => getPmState())
+  ipcMain.handle('pm:run', async (_e, trigger: 'manual' | 'chat', userInput?: string) => {
+    runPmAgent(trigger, userInput).catch(err => console.error('[vibe] pm error', err))
+    return { ok: true }
+  })
+  ipcMain.handle('pm:clear', () => { clearPmChat(); return { ok: true } })
+  ipcMain.handle('pm:read_summary', async () => {
+    const cfg = getConfig()
+    if (!cfg.workspacePath) return ''
+    return readSummary(cfg.workspacePath)
+  })
+  ipcMain.handle('pm:last_modified', async () => {
+    const cfg = getConfig()
+    if (!cfg.workspacePath) return null
+    return summaryLastModified(cfg.workspacePath)
+  })
+
+  ipcMain.handle('tasks:list', async () => {
+    const cfg = getConfig()
+    if (!cfg.workspacePath) return []
+    return loadTasks(cfg.workspacePath)
+  })
+  ipcMain.handle('tasks:create', async (_e, title: string, description?: string) => {
+    const cfg = getConfig()
+    if (!cfg.workspacePath) throw new Error('No workspace')
+    return createTask(cfg.workspacePath, title, description)
+  })
+  ipcMain.handle('tasks:update', async (_e, id: string, patch: Record<string, unknown>) => {
+    const cfg = getConfig()
+    if (!cfg.workspacePath) throw new Error('No workspace')
+    return updateTask(cfg.workspacePath, id, patch)
+  })
+  ipcMain.handle('tasks:delete', async (_e, id: string) => {
+    const cfg = getConfig()
+    if (!cfg.workspacePath) return
+    return deleteTask(cfg.workspacePath, id)
+  })
+  ipcMain.handle('tasks:assign_to_agent', async (_e, taskId: string, agentId: string) => {
+    const cfg = getConfig()
+    const agent = getAgent(agentId) ?? ensureAgent(agentId)
+    if (!cfg.workspacePath) throw new Error('No workspace')
+    const tasks = await loadTasks(cfg.workspacePath)
+    const task = tasks.find(t => t.id === taskId)
+    if (!task) throw new Error('Task not found')
+    if (agent.status === 'running') throw new Error(`${agentId} is currently running`)
+    await updateTask(cfg.workspacePath, taskId, { assignedTo: agentId, status: 'in_progress' })
+    startAgent(agentId, task.title + (task.description ? '\n\n' + task.description : '')).catch(err => console.error('start error', err))
+    return { ok: true }
+  })
+
+  ipcMain.handle('models:pricing', async () => {
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/models')
+      if (!res.ok) return {}
+      const data = await res.json() as { data: Array<{ id: string; pricing?: { prompt?: string; completion?: string } }> }
+      const map: Record<string, { prompt: number; completion: number }> = {}
+      for (const m of data.data) {
+        map[m.id] = {
+          prompt: parseFloat(m.pricing?.prompt ?? '0'),
+          completion: parseFloat(m.pricing?.completion ?? '0')
+        }
+      }
+      return map
+    } catch { return {} }
+  })
 
   ipcMain.handle('workspace:pick', async () => {
     const res = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] })
@@ -71,6 +153,19 @@ function registerIpc(): void {
   ipcMain.handle('agents:get', (_e, id: string) => getAgent(id))
   ipcMain.handle('agents:ensure', (_e, id: string) => ensureAgent(id))
 
+  ipcMain.handle('agents:spawn', () => spawnAgent())
+  ipcMain.handle('agents:close', async (_e, id: string) => {
+    const cfg = getConfig()
+    const agent = getAgent(id)
+    if (agent?.branch && cfg.workspacePath && agent.worktreePath) {
+      await removeWorktree(cfg.workspacePath, agent.worktreePath).catch(() => {})
+      await deleteBranch(cfg.workspacePath, agent.branch).catch(() => {})
+    }
+    closeAgent(id)
+    if (cfg.workspacePath) await deleteAgentFile(cfg.workspacePath, id)
+    return { ok: true }
+  })
+
   ipcMain.handle('agent:start', async (_e, id: string, task: string) => {
     startAgent(id, task).catch(err => console.error('agent error', err))
     return { ok: true }
@@ -86,6 +181,22 @@ function registerIpc(): void {
     return { ok: true }
   })
 
+  ipcMain.handle('agent:check_overlap', async (_e, id: string) => {
+    const cfg = getConfig()
+    const agent = getAgent(id)
+    if (!cfg.workspacePath || !agent?.branch) return { own: [], overlaps: {} }
+    const own = await branchChangedFiles(cfg.workspacePath, agent.branch)
+    const overlaps: Record<string, string[]> = {}
+    for (const other of listAgents()) {
+      if (other.id === id || !other.branch) continue
+      if (other.status !== 'awaiting_merge' && other.status !== 'running' && other.status !== 'awaiting_input') continue
+      const theirs = await branchChangedFiles(cfg.workspacePath, other.branch)
+      const shared = own.filter(f => theirs.includes(f))
+      if (shared.length) overlaps[other.id] = shared
+    }
+    return { own, overlaps }
+  })
+
   ipcMain.handle('agent:merge', async (_e, id: string) => {
     const cfg = getConfig()
     const agent = getAgent(id)
@@ -96,6 +207,8 @@ function registerIpc(): void {
       if (agent.worktreePath) await removeWorktree(cfg.workspacePath, agent.worktreePath)
       if (agent.branch) await deleteBranch(cfg.workspacePath, agent.branch)
       emit({ agentId: id, type: 'status', data: 'merged' })
+      // Fire PM agent post-merge (non-blocking)
+      runPmAgent('merge').catch(err => console.error('[vibe] pm-agent post-merge failed', err))
     }
     return result
   })

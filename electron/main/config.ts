@@ -6,7 +6,8 @@ const store = new Store<Config>({
     workspacePath: null,
     openrouterApiKey: null,
     model: 'openrouter/free,minimax/minimax-m3:free',
-    maxSteps: 25
+    maxSteps: 25,
+    agentCount: 4
   }
 })
 
@@ -15,7 +16,8 @@ export function getConfig(): Config {
     workspacePath: store.get('workspacePath'),
     openrouterApiKey: store.get('openrouterApiKey'),
     model: store.get('model'),
-    maxSteps: store.get('maxSteps')
+    maxSteps: store.get('maxSteps'),
+    agentCount: store.get('agentCount') ?? 4
   }
 }
 
