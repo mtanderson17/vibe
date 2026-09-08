@@ -165,15 +165,20 @@ Being upfront about the state of the app while it's still stabilizing:
 ## Roadmap
 
 **Near term**
-- Container-per-agent isolation for `run_bash` sandboxing (approval shell exists as v0.5)
+- Container-per-agent isolation for `run_bash` sandboxing (approval shell already ships)
 - Encrypted key storage via Electron's `safeStorage`
 - PM-agent model override (individual agents already have per-agent override)
+- Dynamic model catalogs — fetch each provider's `/v1/models` endpoint at runtime
+  instead of hand-curating slug lists in `ModelChainPicker`
 - Ollama model badges in setup (mark which support tool calling)
-- Streaming for Ollama (currently only OpenRouter/Anthropic streams)
+- Streaming for Ollama (currently only OpenRouter/Anthropic stream)
 - Playwright-driven UI tests
 - Command palette (Cmd+K)
 
 **Mid term**
+- **MCP client support** — connect to Model Context Protocol servers so agents can
+  use browser control (Playwright MCP), web search, DB access, Notion/Linear/Slack
+  integrations, and the whole github.com/modelcontextprotocol/servers ecosystem
 - Bring-your-own-compute (BYOC): run agents on user-provided VMs
 - Automatic model routing (cheap for simple tasks, frontier for complex — via RouteLLM or similar)
 - Monaco editor pane for inline code review during agent turns
