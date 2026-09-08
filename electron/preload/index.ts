@@ -34,6 +34,14 @@ const api = {
     ipcRenderer.on('pm:event', listener)
     return () => ipcRenderer.off('pm:event', listener)
   },
+  approval: {
+    respond: (id: string, approved: boolean) => ipcRenderer.invoke('approval:respond', id, approved),
+  },
+  onApprovalRequest: (cb: (req: { id: string; agentId: string; command: string; reason: string }) => void) => {
+    const listener = (_e: unknown, req: { id: string; agentId: string; command: string; reason: string }) => cb(req)
+    ipcRenderer.on('approval:request', listener)
+    return () => ipcRenderer.off('approval:request', listener)
+  },
   workspace: {
     pick: () => ipcRenderer.invoke('workspace:pick')
   },

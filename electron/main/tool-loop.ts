@@ -49,7 +49,10 @@ export async function executeToolCalls(opts: ExecuteToolCallsOptions): Promise<E
     opts.onToolResult?.(call, result)
 
     if (call.name === 'finish') calledFinish = true
-    if (call.name === 'ask_human') { stoppedForInput = true; break }
+    if (call.name === 'ask_human' || call.name === 'ask_human_choice') {
+      stoppedForInput = true
+      break
+    }
   }
 
   return { messages, calledFinish, stoppedForInput, aborted }

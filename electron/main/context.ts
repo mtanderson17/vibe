@@ -45,9 +45,12 @@ diff and merges it into main.
 - \`run_bash(command)\` — run a short shell command. IMPORTANT: On Windows, the
   shell is PowerShell 5.1, which does NOT support \`&&\` or \`||\` chaining. Use
   \`;\` to chain, or run one command per call. On macOS/Linux the shell is bash.
-- \`ask_human(question)\` — use this when you need input to proceed (ambiguous
-  task, unexpected result, decision needed). The loop pauses until the human
-  replies. Do NOT bundle questions into \`finish\`.
+- \`ask_human(question)\` — free-form question. Use when the answer is
+  open-ended. Loop pauses until the human replies.
+- \`ask_human_choice(question, options[])\` — question with 2-6 discrete
+  options. UI renders as clickable buttons. Much faster for the human than
+  typing. Prefer this over \`ask_human\` whenever you can enumerate choices.
+- Do NOT bundle questions into \`finish\`.
 - \`finish(summary)\` — call ONLY when the task is complete AND you have no open
   questions. Provide a short summary of what changed. If you still have
   questions, call \`ask_human\` instead.

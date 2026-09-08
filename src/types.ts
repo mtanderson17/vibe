@@ -107,6 +107,10 @@ declare global {
         lastModified: () => Promise<string | null>
       }
       onPmEvent: (cb: (event: { type: string; data: unknown }) => void) => () => void
+      approval: {
+        respond: (id: string, approved: boolean) => Promise<void>
+      }
+      onApprovalRequest: (cb: (req: { id: string; agentId: string; command: string; reason: string }) => void) => () => void
       workspace: { pick: () => Promise<string | null> }
       context: {
         read: () => Promise<string>

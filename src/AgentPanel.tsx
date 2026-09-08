@@ -203,6 +203,41 @@ export default function AgentPanel({ agentId }: Props) {
         )}
       </div>
 
+      {(() => {
+        // If the agent just called ask_human_choice, show clickable options instead
+        // of the free-form composer. Click sends the chosen option as the continue input.
+        const pendingChoice = isFollowUp ? findPendingChoice(agent.messages) : null
+        if (pendingChoice) {
+          return (
+            <div className="composer choice-composer">
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, color: 'var(--fg-dim)', marginBottom: 8 }}>
+                  Choose one:
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {pendingChoice.options.map((opt, i) => (
+                    <button
+                      key={i}
+                      className="primary"
+                      onClick={async () => {
+                        await window.vibe.agents.continue(agentId, opt)
+                      }}
+                      style={{ padding: '8px 14px' }}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--fg-dim)' }}>
+                  Or type a custom reply below:
+                </div>
+              </div>
+            </div>
+          )
+        }
+        return null
+      })()}
+
       <div className="composer">
         <textarea
           value={task}
@@ -230,5 +265,29 @@ export default function AgentPanel({ agentId }: Props) {
       </div>
     </div>
   )
+}
+
+// Find an unanswered ask_human_choice call in the tail of messages.
+// The last assistant message must contain a tool call for ask_human_choice, and
+// the next tool result (if any) is the pending marker. We show choice buttons
+// as long as no user reply has been sent yet.
+function findPendingChoice(messages: import('./types').Message[]): { question: string; options: string[] } | null {
+  // Walk backwards; if we hit a user message before finding an ask_human_choice
+  // tool result at the end, no choice pending.
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (m.role === 'user') return null
+    if (m.role === 'assistant' && m.toolCalls) {
+      const choice = m.toolCalls.find(tc => tc.name === 'ask_human_choice')
+      if (choice) {
+        const options = Array.isArray((choice.arguments as { options?: unknown }).options)
+          ? ((choice.arguments as { options: unknown[] }).options as string[]).map(String)
+          : []
+        const question = String((choice.arguments as { question?: unknown }).question ?? '')
+        return { question, options }
+      }
+    }
+  }
+  return null
 }
 

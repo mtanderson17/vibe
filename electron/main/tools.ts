@@ -1,6 +1,7 @@
 import { readFile, writeFile, readdir, mkdir, stat } from 'node:fs/promises'
 import { execFile, type ChildProcess } from 'node:child_process'
 import path from 'node:path'
+import { requiresApproval, requestApproval } from './approval'
 
 // Track spawned child processes per agent so we can kill them on interrupt
 const activeProcesses = new Map<string, Set<ChildProcess>>()
@@ -76,11 +77,31 @@ export const TOOL_SCHEMAS = [
     type: 'function',
     function: {
       name: 'ask_human',
-      description: 'Ask the human a clarifying question and stop for their reply. Use this whenever you need input before continuing (ambiguous task, unexpected result, decision needed). Do NOT use `finish` if you still have questions.',
+      description: 'Ask the human a free-form clarifying question and stop for their reply. Use when you need open-ended input. If you have specific discrete choices in mind, prefer `ask_human_choice` — the human can click a button instead of typing.',
       parameters: {
         type: 'object',
         properties: { question: { type: 'string' } },
         required: ['question']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'ask_human_choice',
+      description: 'Ask the human a question with 2-6 discrete options. UI renders as clickable buttons — much faster for the human than typing. Use for decisions like "which of these files?" or "keep old behavior or new one?". If options are open-ended, use `ask_human` instead.',
+      parameters: {
+        type: 'object',
+        properties: {
+          question: { type: 'string' },
+          options: {
+            type: 'array',
+            items: { type: 'string' },
+            minItems: 2,
+            maxItems: 6
+          }
+        },
+        required: ['question', 'options']
       }
     }
   },
@@ -142,6 +163,17 @@ export async function executeTool(
     }
     case 'run_bash': {
       const command = String(args.command)
+      // Approval gate for dangerous commands. If no agentId (shouldn't happen
+      // during normal runs), skip the gate to avoid deadlock.
+      if (agentId) {
+        const reason = requiresApproval(command)
+        if (reason) {
+          const approved = await requestApproval(agentId, command, reason)
+          if (!approved) {
+            return `[denied by user] Command not run: ${command}\nReason it required approval: ${reason}`
+          }
+        }
+      }
       return await new Promise<string>(resolve => {
         const child = execFile(
           process.platform === 'win32' ? 'powershell' : 'bash',
@@ -162,6 +194,10 @@ export async function executeTool(
     }
     case 'ask_human': {
       return `Question posted to human. Waiting for reply.`
+    }
+    case 'ask_human_choice': {
+      const opts = Array.isArray(args.options) ? args.options : []
+      return `Question posted to human with ${opts.length} choices. Waiting for reply.`
     }
     case 'finish': {
       return `Task finished: ${args.summary}`

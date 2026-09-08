@@ -29,6 +29,7 @@ async function completeTasksForAgent(workspacePath: string, agentId: string): Pr
 }
 import { runPmAgent, getPmState, clearPmChat, bindPmSender } from './pmagent'
 import { readLedger, summarize } from './ledger'
+import { bindApprovalSender, respondToApproval } from './approval'
 import { readSummary, writeSummary, summaryLastModified } from './context'
 import { readContext, writeContext } from './context'
 import { bindSender, startAgent, continueAgent, killAgent, listAgents, ensureAgent, getAgent, emit, hydrateAgentsFromWorkspace, spawnAgent, closeAgent } from './agent'
@@ -50,6 +51,7 @@ async function createWindow(): Promise<void> {
 
   bindSender(mainWindow.webContents)
   bindPmSender(mainWindow.webContents)
+  bindApprovalSender(mainWindow.webContents)
 
   // Hydrate persisted agents before renderer loads
   const cfg = getConfig()
@@ -80,6 +82,10 @@ app.on('window-all-closed', () => {
 function registerIpc(): void {
   ipcMain.handle('config:get', () => getConfig())
   ipcMain.handle('config:set', (_e, partial) => setConfig(partial))
+
+  ipcMain.handle('approval:respond', (_e, id: string, approved: boolean) => {
+    respondToApproval(id, approved)
+  })
 
   ipcMain.handle('probe:openrouter', async (_e, apiKey: string) => probeOpenRouterFree(apiKey))
   ipcMain.handle('probe:ollama', async () => detectOllama())

@@ -11,10 +11,18 @@ import Icon, { type IconName } from './Icon'
 
 type SidebarView = 'control' | 'tasks' | 'cost' | 'context' | 'settings'
 
+interface ApprovalReq {
+  id: string
+  agentId: string
+  command: string
+  reason: string
+}
+
 export default function App() {
   const [config, setConfig] = useState<Config | null>(null)
   const [sidebarView, setSidebarView] = useState<SidebarView>('control')
   const [focusedAgent, setFocusedAgent] = useState<string | null>(null)
+  const [approvals, setApprovals] = useState<ApprovalReq[]>([])
   const agentSummaries = useAgents(s => s.agents)
   const applyEvent = useAgents(s => s.applyEvent)
   const hydrate = useAgents(s => s.hydrate)
@@ -35,6 +43,18 @@ export default function App() {
     const off = window.vibe.onAgentEvent(applyEvent)
     return off
   }, [applyEvent])
+
+  useEffect(() => {
+    const off = window.vibe.onApprovalRequest(req => {
+      setApprovals(prev => [...prev, req])
+    })
+    return off
+  }, [])
+
+  async function respondApproval(id: string, approved: boolean) {
+    setApprovals(prev => prev.filter(a => a.id !== id))
+    await window.vibe.approval.respond(id, approved)
+  }
 
   const agentIds = useMemo(() => {
     return Object.keys(agentSummaries).sort((a, b) => {
@@ -155,6 +175,30 @@ export default function App() {
         {sidebarView === 'cost' && <CostView />}
         {sidebarView === 'context' && <ContextView />}
       </main>
+
+      {approvals.length > 0 && (
+        <div className="approval-overlay">
+          <div className="approval-modal">
+            <div className="approval-header">
+              <span className="status-dot status-error" />
+              <strong>Command requires approval</strong>
+            </div>
+            <div className="approval-body">
+              <div style={{ fontSize: 12, color: 'var(--fg-dim)' }}>
+                <strong>{approvals[0].agentId}</strong> wants to run — reason: {approvals[0].reason}
+              </div>
+              <pre className="approval-command">{approvals[0].command}</pre>
+              <div style={{ fontSize: 11, color: 'var(--fg-dim)', marginTop: 8 }}>
+                {approvals.length > 1 && `+ ${approvals.length - 1} more waiting`}
+              </div>
+            </div>
+            <div className="approval-actions">
+              <button onClick={() => respondApproval(approvals[0].id, false)}>Deny</button>
+              <button className="primary" onClick={() => respondApproval(approvals[0].id, true)}>Allow this once</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
