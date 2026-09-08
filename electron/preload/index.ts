@@ -49,7 +49,7 @@ const api = {
       'menu:new-agent', 'menu:close-agent', 'menu:settings',
       'menu:view', 'menu:focus-next', 'menu:focus-prev',
       'menu:stop-current', 'menu:pm-regenerate',
-      'menu:shortcuts', 'menu:palette'
+      'menu:shortcuts', 'menu:palette', 'menu:open-project'
     ]
     const handlers: Array<{ ch: string; fn: (_e: unknown, ...args: unknown[]) => void }> = []
     for (const ch of channels) {
@@ -60,7 +60,13 @@ const api = {
     return () => { for (const h of handlers) ipcRenderer.off(h.ch, h.fn) }
   },
   workspace: {
-    pick: () => ipcRenderer.invoke('workspace:pick')
+    pick: () => ipcRenderer.invoke('workspace:pick'),
+    switch: (path?: string) => ipcRenderer.invoke('workspace:switch', path)
+  },
+  onWorkspaceSwitched: (cb: (path: string) => void) => {
+    const listener = (_e: unknown, path: string) => cb(path)
+    ipcRenderer.on('workspace:switched', listener)
+    return () => ipcRenderer.off('workspace:switched', listener)
   },
   context: {
     read: () => ipcRenderer.invoke('context:read'),

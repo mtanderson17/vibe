@@ -15,6 +15,7 @@ const SECRET_FIELDS: Array<keyof Config> = [
 const store = new Store<Config>({
   defaults: {
     workspacePath: null,
+    recentWorkspaces: [],
     openrouterApiKey: null,
     anthropicApiKey: null,
     openaiApiKey: null,
@@ -32,6 +33,7 @@ const store = new Store<Config>({
 export function getConfig(): Config {
   return {
     workspacePath: store.get('workspacePath'),
+    recentWorkspaces: store.get('recentWorkspaces') ?? [],
     openrouterApiKey: decryptSecret(store.get('openrouterApiKey')),
     anthropicApiKey: decryptSecret(store.get('anthropicApiKey')),
     openaiApiKey: decryptSecret(store.get('openaiApiKey')),
@@ -56,4 +58,11 @@ export function setConfig(partial: Partial<Config>): Config {
     }
   }
   return getConfig()
+}
+
+// Push a workspace path to the front of the recent list (MRU, capped at 10).
+export function pushRecentWorkspace(path: string): void {
+  const list = (store.get('recentWorkspaces') ?? []).filter(p => p !== path)
+  list.unshift(path)
+  store.set('recentWorkspaces', list.slice(0, 10))
 }

@@ -47,6 +47,7 @@ export interface AgentState {
 
 export interface Config {
   workspacePath: string | null
+  recentWorkspaces: string[]   // MRU list of workspace paths, current at index 0
   openrouterApiKey: string | null
   anthropicApiKey: string | null
   openaiApiKey: string | null
@@ -54,7 +55,7 @@ export interface Config {
   groqApiKey: string | null
   xaiApiKey: string | null
   model: string
-  pmModel: string | null   // optional PM-specific model; falls back to global model if null/empty
+  pmModel: string | null
   maxSteps: number
   agentCount: number
 }

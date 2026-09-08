@@ -48,6 +48,7 @@ export interface AgentState {
 
 export interface Config {
   workspacePath: string | null
+  recentWorkspaces: string[]
   openrouterApiKey: string | null
   anthropicApiKey: string | null
   openaiApiKey: string | null
@@ -120,7 +121,11 @@ declare global {
       }
       onApprovalRequest: (cb: (req: { id: string; agentId: string; command: string; reason: string }) => void) => () => void
       onMenuCommand: (cb: (channel: string, ...args: unknown[]) => void) => () => void
-      workspace: { pick: () => Promise<string | null> }
+      workspace: {
+        pick: () => Promise<string | null>
+        switch: (path?: string) => Promise<string | null>
+      }
+      onWorkspaceSwitched: (cb: (path: string) => void) => () => void
       context: {
         read: () => Promise<string>
         write: (content: string) => Promise<void>

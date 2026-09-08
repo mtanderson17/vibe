@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'node:path'
-import { getConfig, setConfig } from './config'
+import { getConfig, setConfig, pushRecentWorkspace } from './config'
 import { ensureRepo, mergeBranch, abortMerge, removeWorktree, deleteBranch, branchChangedFiles, branchDiff } from './git'
 import { resolveConflicts, applyResolution, commitResolution } from './resolver'
 import { probeOpenRouterFree, detectOllama } from './probe'
@@ -190,8 +190,26 @@ function registerIpc(): void {
     if (res.canceled || !res.filePaths[0]) return null
     const workspacePath = res.filePaths[0]
     setConfig({ workspacePath })
+    pushRecentWorkspace(workspacePath)
     await ensureRepo(workspacePath)
     return workspacePath
+  })
+
+  // Full "switch project" flow: pick, ensure repo, add to recent, hydrate agents, reload UI.
+  ipcMain.handle('workspace:switch', async (_e, path?: string) => {
+    let target = path
+    if (!target) {
+      const res = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] })
+      if (res.canceled || !res.filePaths[0]) return null
+      target = res.filePaths[0]
+    }
+    setConfig({ workspacePath: target })
+    pushRecentWorkspace(target)
+    await ensureRepo(target).catch(err => console.error('[vibe] ensureRepo failed', err))
+    await hydrateAgentsFromWorkspace(target).catch(err => console.error('[vibe] hydrate failed', err))
+    if (mainWindow) buildAppMenu(mainWindow)  // rebuild so File > Open Recent reflects new MRU
+    mainWindow?.webContents.send('workspace:switched', target)
+    return target
   })
 
   ipcMain.handle('context:read', async () => {

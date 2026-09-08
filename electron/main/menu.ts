@@ -1,4 +1,5 @@
 import { Menu, shell, type MenuItemConstructorOptions, type BrowserWindow } from 'electron'
+import { getConfig } from './config'
 
 // Vibe application menu — replaces the default Electron menu with items that
 // actually do something in the app. Every menu item that maps to an in-app
@@ -31,6 +32,16 @@ export function buildAppMenu(win: BrowserWindow): void {
     {
       label: 'File',
       submenu: [
+        {
+          label: 'Open Project…',
+          accelerator: 'CommandOrControl+O',
+          click: () => send('menu:open-project')
+        },
+        {
+          label: 'Open Recent',
+          submenu: recentWorkspacesSubmenu(send)
+        },
+        { type: 'separator' },
         {
           label: 'New Agent',
           accelerator: 'CommandOrControl+T',
@@ -118,4 +129,15 @@ export function buildAppMenu(win: BrowserWindow): void {
   ]
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
+function recentWorkspacesSubmenu(send: (channel: string, ...args: unknown[]) => void): MenuItemConstructorOptions[] {
+  const recent = getConfig().recentWorkspaces
+  if (!recent.length) {
+    return [{ label: '(no recent projects)', enabled: false }]
+  }
+  return recent.map(path => ({
+    label: path,
+    click: () => send('menu:open-project', path)
+  }))
 }

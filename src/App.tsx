@@ -138,10 +138,23 @@ export default function App() {
         case 'menu:pm-regenerate': window.vibe.pm.run('manual'); break
         case 'menu:shortcuts':     setShortcutsOpen(true); break
         case 'menu:palette':       setPaletteOpen(prev => !prev); break
+        case 'menu:open-project': {
+          const path = typeof args[0] === 'string' ? args[0] as string : undefined
+          window.vibe.workspace.switch(path).catch(err => console.error('[vibe] open project failed', err))
+          break
+        }
       }
     })
     return off
   }, [agentIds, focusedAgent, handleClose, handleSpawn])
+
+  // Reload the app when workspace switches — cheapest way to reset all view state
+  useEffect(() => {
+    const off = window.vibe.onWorkspaceSwitched(() => {
+      window.location.reload()
+    })
+    return off
+  }, [])
 
   const commands: Command[] = useMemo(() => {
     const cmds: Command[] = []
@@ -190,11 +203,31 @@ export default function App() {
     cmds.push({ id: 'pm.regenerate', label: 'Regenerate project summary (PM)', group: 'PM', run: () => { window.vibe.pm.run('manual') } })
     cmds.push({ id: 'pm.clear', label: 'Clear PM chat', group: 'PM', run: () => { window.vibe.pm.clear() } })
 
+    // Project switcher
+    cmds.push({
+      id: 'project.open',
+      label: 'Open project…',
+      hint: `${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+O`,
+      group: 'Project',
+      run: () => { window.vibe.workspace.switch() }
+    })
+    for (const path of (config?.recentWorkspaces ?? []).slice(0, 8)) {
+      if (path === config?.workspacePath) continue
+      const short = path.split(/[\\/]/).slice(-2).join('/')
+      cmds.push({
+        id: `project.open.${path}`,
+        label: `Open recent: ${short}`,
+        hint: path,
+        group: 'Project',
+        run: () => { window.vibe.workspace.switch(path) }
+      })
+    }
+
     // Help
     cmds.push({ id: 'help.shortcuts', label: 'Show keyboard shortcuts', hint: `${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+/`, group: 'Help', run: () => setShortcutsOpen(true) })
 
     return cmds
-  }, [agentIds, agentSummaries, atAgentCap, handleClose, handleSpawn])
+  }, [agentIds, agentSummaries, atAgentCap, handleClose, handleSpawn, config])
 
   if (!config) return null
 
@@ -226,7 +259,12 @@ export default function App() {
             <Icon name="settings" size={14} />
             <span>Settings</span>
           </button>
-          <div className="sidebar-workspace" title={config.workspacePath ?? ''}>
+          <div
+            className="sidebar-workspace"
+            title={`Click to switch project · ${config.workspacePath ?? ''}`}
+            onClick={() => window.vibe.workspace.switch()}
+            style={{ cursor: 'pointer' }}
+          >
             {config.workspacePath?.split(/[\\/]/).slice(-2).join('/')}
           </div>
         </div>
