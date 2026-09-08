@@ -12,7 +12,7 @@ import { appendLedgerEntry, estimateCost } from './ledger'
 import { getPricing } from './pricing'
 import { readContext, readSummary, writeSummary, summaryLastModified } from './context'
 import { createTask, loadTasks, updateTask } from './tasks'
-import { launchApp, stopApp, listRunningApps } from './launcher'
+import { launchApp, stopApp, listRunningApps, tailApp } from './launcher'
 
 const exec = promisify(execFile)
 
@@ -126,7 +126,7 @@ const PM_TOOL_SCHEMAS = [
     type: 'function',
     function: {
       name: 'launch_app',
-      description: 'Launch a long-running process (dev server, build watcher, tests in watch mode). Spawns detached from the workspace root and returns immediately with a pid. Use this when the human asks you to "run the app", "start the dev server", etc. Returns the pid, which you can pass to stop_app later.',
+      description: 'Launch a long-running process (dev server, build watcher, tests in watch mode). Spawns detached from the workspace root. Waits 1.5s to check the process actually started — if it exited within that window, returns an error with the startup output. If it stays running, returns pid + the first burst of output (useful to see the real port being bound). Use tail_app(pid) later to see more output.',
       parameters: {
         type: 'object',
         properties: {
@@ -154,6 +154,18 @@ const PM_TOOL_SCHEMAS = [
       name: 'list_running_apps',
       description: 'List all apps currently running that were launched via launch_app.',
       parameters: { type: 'object', properties: {} }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'tail_app',
+      description: 'Get the last ~4KB of stdout/stderr from a launched app. Use to diagnose "why is the server not responding" — you can see the actual port it bound to, or crash traces.',
+      parameters: {
+        type: 'object',
+        properties: { pid: { type: 'integer' } },
+        required: ['pid']
+      }
     }
   },
   {
@@ -228,8 +240,11 @@ async function executePmTool(
     }
     case 'launch_app': {
       try {
-        const launched = launchApp(String(args.command), workspace)
-        return `Launched (pid=${launched.pid}): ${launched.command}\nRunning in background. Use stop_app(pid=${launched.pid}) to stop it.`
+        const launched = await launchApp(String(args.command), workspace)
+        const outHint = launched.earlyOutput?.trim()
+          ? `\n--- initial output ---\n${launched.earlyOutput}`
+          : ''
+        return `Launched (pid=${launched.pid}): ${launched.command}\nRunning in background. Use stop_app(pid=${launched.pid}) to stop, or tail_app(pid=${launched.pid}) to see recent output.${outHint}`
       } catch (e) {
         return `[error] Failed to launch: ${(e as Error).message}`
       }
@@ -242,6 +257,10 @@ async function executePmTool(
       const apps = listRunningApps()
       if (apps.length === 0) return '(no apps running)'
       return apps.map(a => `pid=${a.pid} · started ${a.startedAt} · ${a.command}`).join('\n')
+    }
+    case 'tail_app': {
+      const t = tailApp(Number(args.pid))
+      return `alive=${t.alive}\n--- output ---\n${t.output || '(no output yet)'}`
     }
     case 'finish':
       return `Done: ${args.summary}`

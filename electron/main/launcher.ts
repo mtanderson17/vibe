@@ -10,9 +10,11 @@ interface Launched {
   cwd: string
   startedAt: string
   child: ChildProcess
+  outputTail: string     // last N chars of combined stdout/stderr — kept for diagnostics
 }
 
 const running = new Map<number, Launched>()
+const MAX_TAIL = 4000  // chars of output to keep per process
 
 export interface LaunchedApp {
   pid: number
@@ -20,11 +22,29 @@ export interface LaunchedApp {
   cwd: string
   startedAt: string
   alive: boolean
+  earlyOutput?: string   // first 1.5s of output, useful for detecting startup errors
+}
+
+// Wait `ms` for the process to either exit or produce output, then resolve.
+// Used to give the caller a real-ish signal about whether the process started ok.
+function waitEarly(child: ChildProcess, ms: number): Promise<{ exitedEarly: boolean; earlyOutput: string }> {
+  return new Promise(resolve => {
+    let earlyOutput = ''
+    let exitedEarly = false
+    let settled = false
+    const finish = () => { if (!settled) { settled = true; resolve({ exitedEarly, earlyOutput: earlyOutput.slice(-MAX_TAIL) }) } }
+    const onData = (buf: Buffer) => { earlyOutput += buf.toString('utf8'); if (earlyOutput.length > MAX_TAIL * 2) earlyOutput = earlyOutput.slice(-MAX_TAIL * 2) }
+    child.stdout?.on('data', onData)
+    child.stderr?.on('data', onData)
+    child.once('exit', () => { exitedEarly = true; finish() })
+    setTimeout(finish, ms)
+  })
 }
 
 // Spawn detached — process keeps running after this function returns and after
-// Vibe closes. Stdio is ignored so we don't fill buffers.
-export function launchApp(command: string, cwd: string): LaunchedApp {
+// Vibe closes. We pipe stdio (rather than 'ignore') so we can report early
+// output to the caller; buffered locally so we don't fill disk.
+export async function launchApp(command: string, cwd: string): Promise<LaunchedApp> {
   const isWin = process.platform === 'win32'
   const shell = isWin ? 'powershell.exe' : 'bash'
   const args = isWin ? ['-NoProfile', '-Command', command] : ['-lc', command]
@@ -32,27 +52,35 @@ export function launchApp(command: string, cwd: string): LaunchedApp {
   const child = spawn(shell, args, {
     cwd,
     detached: true,
-    stdio: 'ignore',
+    stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true
   })
 
   const pid = child.pid ?? -1
   if (pid < 0) throw new Error('Failed to spawn process')
 
-  running.set(pid, {
-    pid,
-    command,
-    cwd,
-    startedAt: new Date().toISOString(),
-    child
-  })
+  const startedAt = new Date().toISOString()
+  const entry: Launched = { pid, command, cwd, startedAt, child, outputTail: '' }
+  running.set(pid, entry)
 
-  child.on('exit', () => {
-    running.delete(pid)
-  })
+  // Keep buffering output for diagnostics even after early window
+  const accum = (buf: Buffer) => {
+    entry.outputTail += buf.toString('utf8')
+    if (entry.outputTail.length > MAX_TAIL) entry.outputTail = entry.outputTail.slice(-MAX_TAIL)
+  }
+  child.stdout?.on('data', accum)
+  child.stderr?.on('data', accum)
+  child.on('exit', () => running.delete(pid))
+  child.on('error', () => running.delete(pid))
+
+  const { exitedEarly, earlyOutput } = await waitEarly(child, 1500)
+
+  if (exitedEarly) {
+    throw new Error(`Process exited within 1.5s — likely startup failure.\n${earlyOutput || '(no output)'}`)
+  }
+
   child.unref()
-
-  return { pid, command, cwd, startedAt: new Date().toISOString(), alive: true }
+  return { pid, command, cwd, startedAt, alive: true, earlyOutput }
 }
 
 export function stopApp(pid: number): { ok: boolean; message: string } {
@@ -60,10 +88,8 @@ export function stopApp(pid: number): { ok: boolean; message: string } {
   if (!entry) return { ok: false, message: `No tracked process with pid ${pid}` }
   try {
     if (process.platform === 'win32') {
-      // On Windows, spawning kills the whole tree if we use taskkill
       spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true })
     } else {
-      // Kill process group (negative pid) since we spawned detached
       try { process.kill(-pid, 'SIGTERM') } catch { entry.child.kill('SIGTERM') }
     }
     running.delete(pid)
@@ -83,7 +109,14 @@ export function listRunningApps(): LaunchedApp[] {
   }))
 }
 
-// Clean up on Vibe exit — best-effort, doesn't block quit
+// Get the last ~4KB of output from a running app. Useful for the PM agent to
+// diagnose why a launched app doesn't seem to be responding.
+export function tailApp(pid: number): { ok: boolean; output: string; alive: boolean } {
+  const entry = running.get(pid)
+  if (!entry) return { ok: false, output: '(no tracked process — may have exited)', alive: false }
+  return { ok: true, output: entry.outputTail, alive: !entry.child.killed }
+}
+
 export function shutdownAllApps(): void {
   for (const pid of running.keys()) {
     stopApp(pid)
