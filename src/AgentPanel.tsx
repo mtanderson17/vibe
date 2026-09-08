@@ -4,6 +4,8 @@ import MessageView from './components/MessageView'
 import FriendlyError from './components/FriendlyError'
 import ResolvedFileView, { type ResolvedFile } from './components/ResolvedFileView'
 import DiffView, { type FileDiff } from './components/DiffView'
+import ModelChainPicker from './components/ModelChainPicker'
+import type { Config } from './types'
 
 interface Props {
   agentId: string
@@ -337,8 +339,14 @@ export default function AgentPanel({ agentId }: Props) {
 function ModelOverrideEditor({ agentId, current, disabled }: { agentId: string; current: string; disabled: boolean }) {
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(current)
+  const [config, setConfig] = useState<Config | null>(null)
 
   useEffect(() => { setValue(current) }, [current])
+  useEffect(() => {
+    if (editing && !config) {
+      window.vibe.config.get().then(setConfig)
+    }
+  }, [editing, config])
 
   if (!editing) {
     return (
@@ -360,21 +368,23 @@ function ModelOverrideEditor({ agentId, current, disabled }: { agentId: string; 
   }
 
   return (
-    <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-      <input
-        autoFocus
-        value={value}
-        onChange={e => setValue(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === 'Enter') save()
-          if (e.key === 'Escape') { setValue(current); setEditing(false) }
-        }}
-        placeholder="e.g. anthropic/claude-sonnet-4-6 (empty = use global)"
-        style={{ fontSize: 11, padding: '2px 6px', width: 320 }}
-      />
-      <button style={{ fontSize: 11, padding: '2px 8px' }} onClick={save}>Set</button>
-      <button style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => { setValue(current); setEditing(false) }}>Cancel</button>
-    </span>
+    <div className="agent-model-editor">
+      <div className="agent-model-editor-header">
+        <strong style={{ fontSize: 13 }}>Model for {agentId}</strong>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button style={{ fontSize: 11, padding: '3px 10px' }} onClick={() => { setValue(current); setEditing(false) }}>Cancel</button>
+          <button className="primary" style={{ fontSize: 11, padding: '3px 10px' }} onClick={save}>Save</button>
+        </div>
+      </div>
+      {config ? (
+        <ModelChainPicker value={value} onChange={setValue} config={config} compact />
+      ) : (
+        <div style={{ padding: 12, fontSize: 12, opacity: 0.6 }}>Loading providers…</div>
+      )}
+      <div style={{ fontSize: 11, opacity: 0.7, marginTop: 6 }}>
+        Empty selection = use the global default.
+      </div>
+    </div>
   )
 }
 

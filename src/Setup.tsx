@@ -1,30 +1,16 @@
 import { useEffect, useState } from 'react'
 import type { Config } from './types'
+import ModelChainPicker from './components/ModelChainPicker'
 
 interface Props {
   config: Config
   onSaved: (c: Config) => void
 }
 
-interface ProbeResult {
-  slug: string
-  status: 'ok' | 'rate_limited' | 'paid_only' | 'unavailable' | 'error'
-  message?: string
-  contextLength?: number
-}
-
 interface OllamaState {
   available: boolean
   baseUrl: string
   models: Array<{ name: string }>
-}
-
-const STATUS_LABELS: Record<ProbeResult['status'], { text: string; color: string; icon: string }> = {
-  ok:            { text: 'available',    color: 'var(--green)',   icon: '✓' },
-  rate_limited:  { text: 'rate limited', color: 'var(--yellow)',  icon: '⏱' },
-  paid_only:     { text: 'paid only',    color: 'var(--fg-dim)',  icon: '$' },
-  unavailable:   { text: 'unavailable',  color: 'var(--fg-dim)',  icon: '·' },
-  error:         { text: 'error',        color: 'var(--red)',     icon: '✗' }
 }
 
 interface ProviderSpec {
@@ -109,8 +95,6 @@ export default function Setup({ config, onSaved }: Props) {
   const [agentCount, setAgentCount] = useState(config.agentCount ?? 4)
   const [maxSteps, setMaxSteps] = useState(config.maxSteps ?? 25)
   const [saving, setSaving] = useState(false)
-  const [probing, setProbing] = useState(false)
-  const [probeResults, setProbeResults] = useState<ProbeResult[]>([])
   const [ollama, setOllama] = useState<OllamaState | null>(null)
 
   useEffect(() => {
@@ -120,24 +104,6 @@ export default function Setup({ config, onSaved }: Props) {
   async function pickWorkspace() {
     const p = await window.vibe.workspace.pick()
     if (p) setWorkspace(p)
-  }
-
-  async function probe() {
-    if (!keys.openrouterApiKey?.trim()) return
-    setProbing(true)
-    setProbeResults([])
-    try {
-      const results = await window.vibe.probe.openrouter(keys.openrouterApiKey.trim())
-      setProbeResults(results)
-      const working = results.filter(r => r.status === 'ok')
-      const currentSlugs = model.split(',').map(s => s.trim())
-      const currentIsWorking = currentSlugs.some(s => working.find(w => w.slug === s))
-      if (working.length && !currentIsWorking) {
-        setModel(working.slice(0, 3).map(w => w.slug).join(','))
-      }
-    } finally {
-      setProbing(false)
-    }
   }
 
   async function save() {
@@ -235,78 +201,27 @@ export default function Setup({ config, onSaved }: Props) {
 
         {/* Model */}
         <section className="settings-section">
-          <div className="settings-section-title">Default model</div>
+          <div className="settings-section-title">Default model chain</div>
           <div className="settings-section-body">
             <div className="settings-field">
-              <label>Model slug (comma-separated for fallback chain)</label>
-              <div className="row-inline">
-                <input
-                  value={model}
-                  onChange={e => setModel(e.target.value)}
-                  placeholder="openrouter/free,minimax/minimax-m3:free"
-                />
-                <button onClick={probe} disabled={!keys.openrouterApiKey?.trim() || probing}>
-                  {probing ? 'Testing…' : 'Test free models'}
-                </button>
-              </div>
+              <label>Model chain (in order of priority)</label>
+              <ModelChainPicker
+                value={model}
+                onChange={setModel}
+                config={{
+                  ...config,
+                  openrouterApiKey: keys.openrouterApiKey || null,
+                  anthropicApiKey: keys.anthropicApiKey || null,
+                  openaiApiKey: keys.openaiApiKey || null,
+                  geminiApiKey: keys.geminiApiKey || null,
+                  groqApiKey: keys.groqApiKey || null,
+                  xaiApiKey: keys.xaiApiKey || null
+                }}
+              />
               <p className="hint">
-                Applies globally. Individual agents can override in their header. Use prefixes like{' '}
-                <code>anthropic/</code>, <code>openai/</code>, <code>ollama/</code> to route direct when the corresponding key is set below.
+                Applies globally. Individual agents can override in their header. First model is primary; if it fails, Vibe falls through to the next.
               </p>
             </div>
-
-            {probeResults.length > 0 && (
-              <div className="settings-field">
-                <label>Live free-tier models (tested against your OpenRouter key)</label>
-                <div className="probe-list">
-                  {probeResults.map(r => {
-                    const meta = STATUS_LABELS[r.status]
-                    const selected = model.split(',').map(s => s.trim()).includes(r.slug)
-                    return (
-                      <div
-                        key={r.slug}
-                        className={`probe-row ${selected ? 'selected' : ''} ${r.status === 'ok' ? 'clickable' : 'dim'}`}
-                        onClick={() => {
-                          if (r.status !== 'ok') return
-                          const list = model.split(',').map(s => s.trim()).filter(Boolean)
-                          const next = list.includes(r.slug)
-                            ? list.filter(s => s !== r.slug)
-                            : [r.slug, ...list]
-                          setModel(next.join(','))
-                        }}
-                      >
-                        <span style={{ color: meta.color, width: 14 }}>{meta.icon}</span>
-                        <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 12 }}>{r.slug}</span>
-                        {r.contextLength && (
-                          <span style={{ fontSize: 10, opacity: 0.6 }}>{(r.contextLength / 1000).toFixed(0)}k ctx</span>
-                        )}
-                        <span style={{ fontSize: 10, color: meta.color }}>{meta.text}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {ollama?.available && ollama.models.length > 0 && (
-              <div className="settings-field">
-                <label>Local Ollama detected</label>
-                <p className="hint" style={{ marginTop: 0 }}>
-                  {ollama.models.length} model{ollama.models.length !== 1 ? 's' : ''} available at {ollama.baseUrl}. No API key required.
-                </p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {ollama.models.slice(0, 8).map(m => (
-                    <button
-                      key={m.name}
-                      onClick={() => setModel(`ollama/${m.name}`)}
-                      style={{ fontSize: 11, padding: '4px 10px' }}
-                    >
-                      Use {m.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </section>
 
