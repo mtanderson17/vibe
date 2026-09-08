@@ -205,6 +205,14 @@ async function runLoop(agent: AgentState): Promise<void> {
       }
 
       if (!message.toolCalls || message.toolCalls.length === 0) {
+        // Model returned no tool calls. If it also returned no content, that's a
+        // model failure (common with weak free-tier models mid-turn). Surface it.
+        if (!message.content || !message.content.trim()) {
+          agent.messages.push({
+            role: 'system',
+            content: '[Model returned empty response — click Continue to retry, or send guidance to redirect.]'
+          })
+        }
         stoppedForInput = true
         break
       }

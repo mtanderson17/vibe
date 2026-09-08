@@ -229,9 +229,18 @@ export default function AgentPanel({ agentId }: Props) {
       )}
 
       <div className="chat" ref={chatRef}>
-        {agent.messages.filter(m => m.role !== 'system').map((m, i) => (
-          <MessageView key={i} message={m} />
-        ))}
+        {agent.messages
+          .filter(m => {
+            // Hide our synthetic system markers (rendered as banners elsewhere) and
+            // empty assistant bubbles (model returned nothing — the system marker
+            // above will explain what happened).
+            if (m.role === 'system') return false
+            if (m.role === 'assistant' && !m.content && !m.toolCalls?.length) return false
+            return true
+          })
+          .map((m, i) => (
+            <MessageView key={i} message={m} />
+          ))}
         {agent.status === 'running' &&
           agent.messages[agent.messages.length - 1]?.role !== 'assistant' && (
           <div className="msg system">agent is thinking…</div>
@@ -242,31 +251,39 @@ export default function AgentPanel({ agentId }: Props) {
       </div>
 
       {(() => {
-        // If the agent hit the step limit, show a Continue button for one-click resume.
-        const hitLimit = agent.status === 'awaiting_input' &&
-          agent.messages[agent.messages.length - 1]?.role === 'system' &&
-          (agent.messages[agent.messages.length - 1].content ?? '').includes('Reached step limit')
-        if (hitLimit) {
+        // System-marker triggered Continue banners (hit-limit / empty response).
+        const lastMsg = agent.messages[agent.messages.length - 1]
+        const marker = agent.status === 'awaiting_input' && lastMsg?.role === 'system'
+          ? (lastMsg.content ?? '')
+          : ''
+        const hitLimit = marker.includes('Reached step limit')
+        const emptyResp = marker.includes('Model returned empty response')
+        if (hitLimit || emptyResp) {
+          const banner = hitLimit
+            ? 'Agent used its step budget. Continue with more runway, or send new instructions to redirect:'
+            : 'Model returned an empty response (common with weak free-tier models). Retry, or send guidance to redirect:'
           return (
             <div className="composer choice-composer">
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, color: 'var(--fg-dim)', marginBottom: 8 }}>
-                  Agent used its step budget. Continue with more runway, or send new instructions to redirect:
+                  {banner}
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   <button
                     className="primary"
-                    onClick={() => window.vibe.agents.continue(agentId, 'Continue.')}
+                    onClick={() => window.vibe.agents.continue(agentId, hitLimit ? 'Continue.' : 'Please respond — call a tool, ask a question via ask_human, or call finish if done.')}
                     style={{ padding: '8px 14px' }}
                   >
-                    Continue
+                    {hitLimit ? 'Continue' : 'Retry'}
                   </button>
-                  <button
-                    onClick={() => window.vibe.agents.continue(agentId, 'Wrap up. Summarize what you did and call finish.')}
-                    style={{ padding: '8px 14px' }}
-                  >
-                    Wrap up &amp; finish
-                  </button>
+                  {hitLimit && (
+                    <button
+                      onClick={() => window.vibe.agents.continue(agentId, 'Wrap up. Summarize what you did and call finish.')}
+                      style={{ padding: '8px 14px' }}
+                    >
+                      Wrap up &amp; finish
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
