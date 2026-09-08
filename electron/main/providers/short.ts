@@ -3,6 +3,11 @@
 
 import { completion, providerFor, type ProviderKeys } from './adapter'
 
+const DIRECT_PROVIDER_PREFIXES = ['ollama/', 'anthropic/', 'openai/', 'google/', 'gemini/', 'groq/', 'xai/', 'x-ai/']
+function isDirectProviderSlug(slug: string): boolean {
+  return DIRECT_PROVIDER_PREFIXES.some(p => slug.startsWith(p))
+}
+
 export async function shortCompletion(
   keys: ProviderKeys,
   model: string,
@@ -19,7 +24,9 @@ export async function shortCompletion(
 
   const result = await completion({
     provider,
-    modelInBody: useOpenRouterFallback ? slugs.filter(s => !s.startsWith('ollama/') && !s.startsWith('anthropic/')).join(',') : provider.model,
+    modelInBody: useOpenRouterFallback
+      ? slugs.filter(s => !isDirectProviderSlug(s)).join(',')
+      : provider.model,
     useModelsArray: useOpenRouterFallback,
     messages: [
       { role: 'system', content: systemPrompt },

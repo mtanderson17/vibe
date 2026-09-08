@@ -67,6 +67,17 @@ export function spawnAgent(): AgentState {
   return a
 }
 
+export function setAgentModel(id: string, modelOverride: string | null): void {
+  const agent = agents.get(id)
+  if (!agent) return
+  agent.modelOverride = modelOverride ?? undefined
+  // Reset pin so the next turn uses the new model. Otherwise the previous
+  // pinned slug (which may not match the new provider) would keep being used.
+  agent.pinnedModel = undefined
+  persist(agent)
+  emit({ agentId: id, type: 'status', data: agent.status })
+}
+
 export function closeAgent(id: string): void {
   const a = agents.get(id)
   if (!a) return
@@ -81,10 +92,21 @@ function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40) || 'task'
 }
 
+function hasAnyProviderKey(cfg: ReturnType<typeof getConfig>): boolean {
+  return !!(cfg.openrouterApiKey || cfg.anthropicApiKey || cfg.openaiApiKey || cfg.geminiApiKey || cfg.groqApiKey || cfg.xaiApiKey)
+}
+
 async function generateSlug(cfg: ReturnType<typeof getConfig>, task: string): Promise<string> {
   try {
     const raw = await shortCompletion(
-      { openrouter: cfg.openrouterApiKey, anthropic: cfg.anthropicApiKey },
+      {
+        openrouter: cfg.openrouterApiKey,
+        anthropic: cfg.anthropicApiKey,
+        openai: cfg.openaiApiKey,
+        gemini: cfg.geminiApiKey,
+        groq: cfg.groqApiKey,
+        xai: cfg.xaiApiKey
+      },
       cfg.model,
       'You turn task descriptions into concise git branch slugs. Output ONLY the slug, no explanation. Format: 2-5 lowercase words joined by hyphens. Examples: "add-pause", "fix-clear-lines-bug", "scaffold-api", "write-tests".',
       task
@@ -120,12 +142,19 @@ async function runLoop(agent: AgentState): Promise<void> {
       agent.step = steps
       emit({ agentId: agent.id, type: 'step', data: { step: steps, max: cfg.maxSteps } })
 
-      // Use pinned model if set (from first successful response), else the configured chain
-      const modelForCall = agent.pinnedModel ?? cfg.model
+      // Priority: pinnedModel (from first served response) > per-agent override > global config
+      const modelForCall = agent.pinnedModel ?? agent.modelOverride ?? cfg.model
 
       emit({ agentId: agent.id, type: 'stream_start', data: null })
       const { message, usage } = await chatCompletion({
-        keys: { openrouter: cfg.openrouterApiKey, anthropic: cfg.anthropicApiKey },
+        keys: {
+        openrouter: cfg.openrouterApiKey,
+        anthropic: cfg.anthropicApiKey,
+        openai: cfg.openaiApiKey,
+        gemini: cfg.geminiApiKey,
+        groq: cfg.groqApiKey,
+        xai: cfg.xaiApiKey
+      },
         model: modelForCall,
         messages: agent.messages,
         tools: TOOL_SCHEMAS as unknown as Array<Record<string, unknown>>,
@@ -136,7 +165,7 @@ async function runLoop(agent: AgentState): Promise<void> {
 
       agent.messages.push(message)
 
-      agent.pinnedModel = pinnedModelFor(agent.pinnedModel, cfg.model, message.servedBy)
+      agent.pinnedModel = pinnedModelFor(agent.pinnedModel, agent.modelOverride ?? cfg.model, message.servedBy)
 
       const nextUsage = accumulateUsage(agent.usage, usage)
       if (nextUsage !== agent.usage) {
@@ -221,8 +250,8 @@ export function killAgent(id: string): void {
 export async function startAgent(id: string, task: string): Promise<void> {
   const cfg = getConfig()
   if (!cfg.workspacePath) throw new Error('Workspace not set')
-  if (!cfg.openrouterApiKey && !cfg.anthropicApiKey && !cfg.model.startsWith('ollama/')) {
-    throw new Error('No API key configured (need OpenRouter, Anthropic, or Ollama model)')
+  if (!hasAnyProviderKey(cfg) && !cfg.model.startsWith('ollama/')) {
+    throw new Error('No API key configured (need OpenRouter, Anthropic, OpenAI, Gemini, Groq, xAI, or Ollama model)')
   }
 
   const agent = ensureAgent(id)

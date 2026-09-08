@@ -15,7 +15,7 @@ export interface ProviderInfo {
   baseUrl: string
   model: string
   needsAuth: boolean
-  label: 'OpenRouter' | 'Ollama' | 'Anthropic'
+  label: 'OpenRouter' | 'Ollama' | 'Anthropic' | 'OpenAI' | 'Gemini' | 'Groq' | 'xAI'
 }
 
 export interface OpenAIRawChoice {

@@ -38,6 +38,7 @@ export interface AgentState {
   messages: Message[]
   error?: string
   pinnedModel?: string
+  modelOverride?: string   // optional per-agent model, overrides global cfg.model
   usage?: TokenUsage
   step?: number
   maxSteps?: number
@@ -47,6 +48,10 @@ export interface Config {
   workspacePath: string | null
   openrouterApiKey: string | null
   anthropicApiKey: string | null
+  openaiApiKey: string | null
+  geminiApiKey: string | null
+  groqApiKey: string | null
+  xaiApiKey: string | null
   model: string
   maxSteps: number
   agentCount: number

@@ -58,6 +58,7 @@ const api = {
     start: (id: string, task: string) => ipcRenderer.invoke('agent:start', id, task),
     continue: (id: string, input: string) => ipcRenderer.invoke('agent:continue', id, input),
     kill: (id: string) => ipcRenderer.invoke('agent:kill', id),
+    setModel: (id: string, model: string | null) => ipcRenderer.invoke('agent:set_model', id, model),
     checkOverlap: (id: string) => ipcRenderer.invoke('agent:check_overlap', id),
     merge: (id: string) => ipcRenderer.invoke('agent:merge', id),
     abortMerge: () => ipcRenderer.invoke('agent:abort_merge'),

@@ -17,9 +17,9 @@ export function providerFor(slug: string, keys: ProviderKeys): ProviderInfo & { 
       apiKey: null
     }
   }
-  // anthropic/* routes to Anthropic direct ONLY if an Anthropic key is configured.
-  // Otherwise the same slug is a valid OpenRouter slug (they use the same format),
-  // so we fall through to OpenRouter — matching what users copy from OpenRouter's site.
+  // BYOK providers all share the same "route direct if key set, else fall through
+  // to OpenRouter" pattern — that way users copying slugs from openrouter.ai/models
+  // still get a working request when they haven't set the direct key yet.
   if (slug.startsWith('anthropic/') && keys.anthropic) {
     return {
       baseUrl: 'https://api.anthropic.com/v1',
@@ -27,6 +27,44 @@ export function providerFor(slug: string, keys: ProviderKeys): ProviderInfo & { 
       needsAuth: true,
       label: 'Anthropic',
       apiKey: keys.anthropic
+    }
+  }
+  if (slug.startsWith('openai/') && keys.openai) {
+    return {
+      baseUrl: 'https://api.openai.com/v1',
+      model: slug.slice('openai/'.length),
+      needsAuth: true,
+      label: 'OpenAI',
+      apiKey: keys.openai
+    }
+  }
+  if ((slug.startsWith('google/') || slug.startsWith('gemini/')) && keys.gemini) {
+    const prefix = slug.startsWith('google/') ? 'google/' : 'gemini/'
+    return {
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+      model: slug.slice(prefix.length),
+      needsAuth: true,
+      label: 'Gemini',
+      apiKey: keys.gemini
+    }
+  }
+  if (slug.startsWith('groq/') && keys.groq) {
+    return {
+      baseUrl: 'https://api.groq.com/openai/v1',
+      model: slug.slice('groq/'.length),
+      needsAuth: true,
+      label: 'Groq',
+      apiKey: keys.groq
+    }
+  }
+  if ((slug.startsWith('xai/') || slug.startsWith('x-ai/')) && keys.xai) {
+    const prefix = slug.startsWith('xai/') ? 'xai/' : 'x-ai/'
+    return {
+      baseUrl: 'https://api.x.ai/v1',
+      model: slug.slice(prefix.length),
+      needsAuth: true,
+      label: 'xAI',
+      apiKey: keys.xai
     }
   }
   return {
@@ -41,6 +79,10 @@ export function providerFor(slug: string, keys: ProviderKeys): ProviderInfo & { 
 export interface ProviderKeys {
   openrouter?: string | null
   anthropic?: string | null
+  openai?: string | null
+  gemini?: string | null
+  groq?: string | null
+  xai?: string | null
 }
 
 export interface CompletionOptions {

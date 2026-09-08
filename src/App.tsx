@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, memo, useCallback } from 'react'
 import type { Config } from './types'
 import { useAgents } from './stores/agents'
 import Setup from './Setup'
@@ -74,25 +74,25 @@ export default function App() {
     setSidebarView('control')
   }
 
-  async function handleClose(id: string) {
+  const handleClose = useCallback(async (id: string) => {
     const a = agentSummaries[id]
     if (a && a.status !== 'idle') {
       if (!confirm(`Close ${id}? Any in-flight work, worktree, and branch will be cleaned up.`)) return
     }
-    // Optimistic UI: remove from store immediately so the tab disappears now.
-    // Worktree/branch cleanup happens in the background (git ops on Windows are ~1-3s).
     removeAgent(id)
     if (focusedAgent === id) setFocusedAgent(null)
     window.vibe.agents.close(id).catch(err => console.error('[vibe] close failed', err))
-  }
+  }, [agentSummaries, focusedAgent, removeAgent])
+
+  const handleFocus = useCallback((id: string) => setFocusedAgent(id), [])
 
   if (!config) return null
 
-  const missingCreds = !config.workspacePath || (
-    !config.openrouterApiKey &&
-    !config.anthropicApiKey &&
-    !config.model.startsWith('ollama/')
+  const hasAnyKey = !!(
+    config.openrouterApiKey || config.anthropicApiKey || config.openaiApiKey ||
+    config.geminiApiKey || config.groqApiKey || config.xaiApiKey
   )
+  const missingCreds = !config.workspacePath || (!hasAnyKey && !config.model.startsWith('ollama/'))
   if (missingCreds) {
     return <Setup config={config} onSaved={setConfig} />
   }
@@ -127,19 +127,13 @@ export default function App() {
           <>
             <div className="agent-tabbar">
               {agentIds.map(id => (
-                <div
+                <AgentTab
                   key={id}
-                  className={`agent-tab ${focusedAgent === id ? 'active' : ''}`}
-                  onClick={() => setFocusedAgent(id)}
-                >
-                  <span className={`status-dot status-${agentSummaries[id]?.status ?? 'idle'}`} />
-                  <span className="agent-tab-label">{id}</span>
-                  <button
-                    className="agent-tab-close"
-                    title="Close agent"
-                    onClick={(e) => { e.stopPropagation(); handleClose(id) }}
-                  >×</button>
-                </div>
+                  id={id}
+                  active={focusedAgent === id}
+                  onFocus={handleFocus}
+                  onClose={handleClose}
+                />
               ))}
               <button
                 className="agent-tab-add"
@@ -202,6 +196,28 @@ export default function App() {
     </div>
   )
 }
+
+// Each tab subscribes only to its own agent's status. When another agent streams,
+// this tab doesn't re-render.
+const AgentTab = memo(function AgentTab({
+  id, active, onFocus, onClose
+}: { id: string; active: boolean; onFocus: (id: string) => void; onClose: (id: string) => void }) {
+  const status = useAgents(s => s.agents[id]?.status ?? 'idle')
+  return (
+    <div
+      className={`agent-tab ${active ? 'active' : ''}`}
+      onClick={() => onFocus(id)}
+    >
+      <span className={`status-dot status-${status}`} />
+      <span className="agent-tab-label">{id}</span>
+      <button
+        className="agent-tab-close"
+        title="Close agent"
+        onClick={(e) => { e.stopPropagation(); onClose(id) }}
+      >×</button>
+    </div>
+  )
+})
 
 function SidebarItem({ icon, label, active, onClick }: { icon: IconName; label: string; active: boolean; onClick: () => void }) {
   return (

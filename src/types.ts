@@ -39,6 +39,7 @@ export interface AgentState {
   messages: Message[]
   error?: string
   pinnedModel?: string
+  modelOverride?: string
   usage?: TokenUsage
   step?: number
   maxSteps?: number
@@ -48,6 +49,10 @@ export interface Config {
   workspacePath: string | null
   openrouterApiKey: string | null
   anthropicApiKey: string | null
+  openaiApiKey: string | null
+  geminiApiKey: string | null
+  groqApiKey: string | null
+  xaiApiKey: string | null
   model: string
   maxSteps: number
   agentCount: number
@@ -125,6 +130,7 @@ declare global {
         start: (id: string, task: string) => Promise<{ ok: boolean }>
         continue: (id: string, input: string) => Promise<{ ok: boolean }>
         kill: (id: string) => Promise<{ ok: boolean }>
+        setModel: (id: string, model: string | null) => Promise<{ ok: boolean }>
         checkOverlap: (id: string) => Promise<{ own: string[]; overlaps: Record<string, string[]> }>
         merge: (id: string) => Promise<{ ok: boolean; conflicts: string[]; output: string }>
         abortMerge: () => Promise<void>

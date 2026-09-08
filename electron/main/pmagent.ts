@@ -252,7 +252,14 @@ async function runPmLoop(workspace: string, model: string, kickoff: string): Pro
   while (steps < MAX) {
     steps++
     const { message, usage } = await chatCompletion({
-      keys: { openrouter: cfg.openrouterApiKey, anthropic: cfg.anthropicApiKey },
+      keys: {
+        openrouter: cfg.openrouterApiKey,
+        anthropic: cfg.anthropicApiKey,
+        openai: cfg.openaiApiKey,
+        gemini: cfg.geminiApiKey,
+        groq: cfg.groqApiKey,
+        xai: cfg.xaiApiKey
+      },
       model: state.pinnedModel ?? model,
       messages,
       tools: PM_TOOL_SCHEMAS as unknown as Array<Record<string, unknown>>
@@ -304,7 +311,8 @@ export async function runPmAgent(trigger: 'merge' | 'manual' | 'chat', userInput
   if (state.status === 'running') throw new Error('PM agent already running')
   const cfg = getConfig()
   if (!cfg.workspacePath) throw new Error('No workspace')
-  if (!cfg.openrouterApiKey && !cfg.anthropicApiKey && !cfg.model.startsWith('ollama/')) {
+  const hasKey = cfg.openrouterApiKey || cfg.anthropicApiKey || cfg.openaiApiKey || cfg.geminiApiKey || cfg.groqApiKey || cfg.xaiApiKey
+  if (!hasKey && !cfg.model.startsWith('ollama/')) {
     throw new Error('No API key or Ollama model')
   }
 

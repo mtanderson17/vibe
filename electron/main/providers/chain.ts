@@ -30,13 +30,12 @@ export async function chatCompletion(opts: ChainOptions): Promise<CompletionResu
     const slug = slugs[i]
     const provider = providerFor(slug, opts.keys)
 
-    // Only OpenRouter supports server-side `models` fallback.
-    // For OpenRouter slugs, batch consecutive OpenRouter slugs into a single call.
-    // For Ollama/Anthropic slugs, send one at a time.
+    // Only OpenRouter supports server-side `models` fallback. Direct BYOK providers
+    // (Anthropic/OpenAI/Gemini/Groq/xAI/Ollama) get called one at a time.
     let modelInBody: string
     let useModelsArray = false
     if (provider.label === 'OpenRouter') {
-      const chain = slugs.slice(i).filter(s => !s.startsWith('ollama/') && !s.startsWith('anthropic/'))
+      const chain = slugs.slice(i).filter(s => !isDirectProviderSlug(s))
       modelInBody = chain.length > 1 ? chain.join(',') : chain[0]
       useModelsArray = chain.length > 1
     } else {
@@ -63,16 +62,18 @@ export async function chatCompletion(opts: ChainOptions): Promise<CompletionResu
       console.warn(`[vibe] ${slug} failed (${e.status}), trying next fallback`)
 
       // Already tried the whole OpenRouter batch on the server side — skip
-      // forward past all remaining OpenRouter slugs to any Ollama/Anthropic fallback.
+      // forward past all remaining OpenRouter slugs to any direct-provider fallback.
       if (provider.label === 'OpenRouter') {
-        while (
-          i + 1 < slugs.length &&
-          !slugs[i + 1].startsWith('ollama/') &&
-          !slugs[i + 1].startsWith('anthropic/')
-        ) i++
+        while (i + 1 < slugs.length && !isDirectProviderSlug(slugs[i + 1])) i++
       }
     }
   }
 
   throw new Error(lastError || 'No providers available')
+}
+
+const DIRECT_PROVIDER_PREFIXES = ['ollama/', 'anthropic/', 'openai/', 'google/', 'gemini/', 'groq/', 'xai/', 'x-ai/']
+
+function isDirectProviderSlug(slug: string): boolean {
+  return DIRECT_PROVIDER_PREFIXES.some(p => slug.startsWith(p))
 }

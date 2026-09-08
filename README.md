@@ -147,10 +147,7 @@ Being upfront about the state of the app while it's still stabilizing:
   until you re-engage. File-overlap warnings at merge time cover the practical
   worst case regardless.
 - **PM agent runs on the same global model as coding agents.** No dedicated
-  model-per-role yet (backlog: per-agent model override).
-- **Streaming re-renders more than they need to.** ControlCenter tiles are
-  per-agent subscriptions (efficient), but the top-level App still subscribes to
-  the whole agents map. Noticeable but not blocking. Fix planned.
+  model-per-role yet (individual agents can override, PM cannot).
 - **UI polish is uneven.** Some screens (Control Center, Cost) are tight; others
   (Setup, Merge conflict banner) could use another pass.
 - **No sandboxing on `run_bash`.** Agents can install packages globally,
@@ -168,11 +165,11 @@ Being upfront about the state of the app while it's still stabilizing:
 ## Roadmap
 
 **Near term**
-- Persistent cost ledger (survives close/spawn/restart, running totals, daily breakdown)
-- Per-agent model override (pick a different model per chat, not just globally)
-- Container-per-agent isolation for `run_bash` sandboxing
+- Container-per-agent isolation for `run_bash` sandboxing (approval shell exists as v0.5)
 - Encrypted key storage via Electron's `safeStorage`
+- PM-agent model override (individual agents already have per-agent override)
 - Ollama model badges in setup (mark which support tool calling)
+- Streaming for Ollama (currently only OpenRouter/Anthropic streams)
 - Playwright-driven UI tests
 - Command palette (Cmd+K)
 

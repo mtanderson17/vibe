@@ -95,6 +95,15 @@ export default function AgentPanel({ agentId }: Props) {
         {agent.branch && <><span>·</span><span className="branch">{agent.branch}</span></>}
         {agent.task && <><span>·</span><span style={{ opacity: 0.7 }}>{agent.task}</span></>}
         {agent.pinnedModel && <><span>·</span><span style={{ opacity: 0.7 }}>{agent.pinnedModel}</span></>}
+        {!agent.pinnedModel && agent.modelOverride && (
+          <><span>·</span><span style={{ opacity: 0.7 }}>{agent.modelOverride}</span></>
+        )}
+        <span>·</span>
+        <ModelOverrideEditor
+          agentId={agentId}
+          current={agent.modelOverride ?? ''}
+          disabled={agent.status === 'running'}
+        />
         {agent.step && agent.maxSteps && (
           <><span>·</span><span style={{ opacity: 0.7 }}>step {agent.step}/{agent.maxSteps}</span></>
         )}
@@ -264,6 +273,50 @@ export default function AgentPanel({ agentId }: Props) {
         </button>
       </div>
     </div>
+  )
+}
+
+function ModelOverrideEditor({ agentId, current, disabled }: { agentId: string; current: string; disabled: boolean }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(current)
+
+  useEffect(() => { setValue(current) }, [current])
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        disabled={disabled}
+        style={{ fontSize: 11, padding: '2px 8px', background: 'transparent', border: '1px dashed var(--border-2)', color: 'var(--fg-dim)' }}
+        title="Override the global model for just this agent"
+      >
+        {current ? 'change model' : '+ model override'}
+      </button>
+    )
+  }
+
+  async function save() {
+    const trimmed = value.trim()
+    await window.vibe.agents.setModel(agentId, trimmed || null)
+    setEditing(false)
+  }
+
+  return (
+    <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+      <input
+        autoFocus
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') save()
+          if (e.key === 'Escape') { setValue(current); setEditing(false) }
+        }}
+        placeholder="e.g. anthropic/claude-sonnet-4-6 (empty = use global)"
+        style={{ fontSize: 11, padding: '2px 6px', width: 320 }}
+      />
+      <button style={{ fontSize: 11, padding: '2px 8px' }} onClick={save}>Set</button>
+      <button style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => { setValue(current); setEditing(false) }}>Cancel</button>
+    </span>
   )
 }
 

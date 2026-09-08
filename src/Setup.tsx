@@ -30,6 +30,13 @@ const STATUS_LABELS: Record<ProbeResult['status'], { text: string; color: string
 export default function Setup({ config, onSaved }: Props) {
   const [apiKey, setApiKey] = useState(config.openrouterApiKey ?? '')
   const [anthropicKey, setAnthropicKey] = useState(config.anthropicApiKey ?? '')
+  const [openaiKey, setOpenaiKey] = useState(config.openaiApiKey ?? '')
+  const [geminiKey, setGeminiKey] = useState(config.geminiApiKey ?? '')
+  const [groqKey, setGroqKey] = useState(config.groqApiKey ?? '')
+  const [xaiKey, setXaiKey] = useState(config.xaiApiKey ?? '')
+  const [showMoreProviders, setShowMoreProviders] = useState(
+    !!(config.openaiApiKey || config.geminiApiKey || config.groqApiKey || config.xaiApiKey)
+  )
   const [workspace, setWorkspace] = useState(config.workspacePath ?? '')
   const [model, setModel] = useState(config.model)
   const [agentCount, setAgentCount] = useState(config.agentCount ?? 4)
@@ -73,6 +80,10 @@ export default function Setup({ config, onSaved }: Props) {
     const next = await window.vibe.config.set({
       openrouterApiKey: apiKey.trim() || null,
       anthropicApiKey: anthropicKey.trim() || null,
+      openaiApiKey: openaiKey.trim() || null,
+      geminiApiKey: geminiKey.trim() || null,
+      groqApiKey: groqKey.trim() || null,
+      xaiApiKey: xaiKey.trim() || null,
       workspacePath: workspace.trim() || null,
       model,
       agentCount: Math.max(1, Math.min(8, agentCount))
@@ -81,7 +92,10 @@ export default function Setup({ config, onSaved }: Props) {
     onSaved(next)
   }
 
-  const hasAnyProvider = apiKey.trim() || anthropicKey.trim() || ollama?.available
+  const hasAnyProvider =
+    apiKey.trim() || anthropicKey.trim() || openaiKey.trim() ||
+    geminiKey.trim() || groqKey.trim() || xaiKey.trim() ||
+    ollama?.available
   const ready = hasAnyProvider && workspace.trim() && model.trim()
 
   return (
@@ -129,7 +143,7 @@ export default function Setup({ config, onSaved }: Props) {
       </div>
 
       <div className="field">
-        <label>Anthropic API key (optional, BYOK for frontier quality)</label>
+        <label>Anthropic API key (BYOK)</label>
         <input
           type="password"
           value={anthropicKey}
@@ -137,11 +151,59 @@ export default function Setup({ config, onSaved }: Props) {
           placeholder="sk-ant-api03-..."
         />
         <p style={{ fontSize: 11, marginTop: 4 }}>
-          Get one at <span style={{ color: 'var(--accent)' }}>console.anthropic.com</span>. Then use models like{' '}
-          <code>anthropic/claude-sonnet-4-6</code> or <code>anthropic/claude-haiku-4-5</code> in the model field below.
-          Uses Anthropic's OpenAI-compatible endpoint.
+          <span style={{ color: 'var(--accent)' }}>console.anthropic.com</span> · use models like{' '}
+          <code>anthropic/claude-sonnet-4-6</code> or <code>anthropic/claude-haiku-4-5</code>
         </p>
       </div>
+
+      <div className="field">
+        <button
+          type="button"
+          onClick={() => setShowMoreProviders(!showMoreProviders)}
+          style={{ background: 'transparent', border: 'none', padding: 0, color: 'var(--accent)', cursor: 'pointer', fontSize: 12 }}
+        >
+          {showMoreProviders ? '▾' : '▸'} More providers (OpenAI, Gemini, Groq, xAI)
+        </button>
+      </div>
+
+      {showMoreProviders && (
+        <>
+          <div className="field">
+            <label>OpenAI API key</label>
+            <input type="password" value={openaiKey} onChange={e => setOpenaiKey(e.target.value)} placeholder="sk-proj-..." />
+            <p style={{ fontSize: 11, marginTop: 4 }}>
+              <span style={{ color: 'var(--accent)' }}>platform.openai.com</span> · use models like{' '}
+              <code>openai/gpt-5</code> or <code>openai/gpt-5-mini</code>
+            </p>
+          </div>
+
+          <div className="field">
+            <label>Google Gemini API key</label>
+            <input type="password" value={geminiKey} onChange={e => setGeminiKey(e.target.value)} placeholder="AIza..." />
+            <p style={{ fontSize: 11, marginTop: 4 }}>
+              <span style={{ color: 'var(--accent)' }}>aistudio.google.com</span> · use models like{' '}
+              <code>google/gemini-2.5-pro</code> or <code>google/gemini-2.5-flash</code>
+            </p>
+          </div>
+
+          <div className="field">
+            <label>Groq API key</label>
+            <input type="password" value={groqKey} onChange={e => setGroqKey(e.target.value)} placeholder="gsk_..." />
+            <p style={{ fontSize: 11, marginTop: 4 }}>
+              <span style={{ color: 'var(--accent)' }}>console.groq.com</span> · very fast inference · use models like{' '}
+              <code>groq/llama-3.3-70b-versatile</code>
+            </p>
+          </div>
+
+          <div className="field">
+            <label>xAI (Grok) API key</label>
+            <input type="password" value={xaiKey} onChange={e => setXaiKey(e.target.value)} placeholder="xai-..." />
+            <p style={{ fontSize: 11, marginTop: 4 }}>
+              <span style={{ color: 'var(--accent)' }}>console.x.ai</span> · use models like <code>xai/grok-4</code>
+            </p>
+          </div>
+        </>
+      )}
 
       {probeResults.length > 0 && (
         <div className="field">

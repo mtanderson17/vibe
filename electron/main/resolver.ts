@@ -89,7 +89,14 @@ ${original}
     try {
       const cfg = getConfig()
       const { message } = await chatCompletion({
-        keys: { openrouter: apiKey, anthropic: cfg.anthropicApiKey },
+        keys: {
+          openrouter: apiKey,
+          anthropic: cfg.anthropicApiKey,
+          openai: cfg.openaiApiKey,
+          gemini: cfg.geminiApiKey,
+          groq: cfg.groqApiKey,
+          xai: cfg.xaiApiKey
+        },
         model,
         messages
       })

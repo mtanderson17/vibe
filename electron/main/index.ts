@@ -32,7 +32,7 @@ import { readLedger, summarize } from './ledger'
 import { bindApprovalSender, respondToApproval } from './approval'
 import { readSummary, writeSummary, summaryLastModified } from './context'
 import { readContext, writeContext } from './context'
-import { bindSender, startAgent, continueAgent, killAgent, listAgents, ensureAgent, getAgent, emit, hydrateAgentsFromWorkspace, spawnAgent, closeAgent } from './agent'
+import { bindSender, startAgent, continueAgent, killAgent, listAgents, ensureAgent, getAgent, emit, hydrateAgentsFromWorkspace, spawnAgent, closeAgent, setAgentModel } from './agent'
 import { deleteAgentFile, saveAgent } from './persistence'
 
 let mainWindow: BrowserWindow | null = null
@@ -229,6 +229,11 @@ function registerIpc(): void {
 
   ipcMain.handle('agent:kill', async (_e, id: string) => {
     killAgent(id)
+    return { ok: true }
+  })
+
+  ipcMain.handle('agent:set_model', async (_e, id: string, model: string | null) => {
+    setAgentModel(id, model)
     return { ok: true }
   })
 
