@@ -12,6 +12,9 @@ const api = {
   models: {
     pricing: () => ipcRenderer.invoke('models:pricing')
   },
+  ledger: {
+    summary: () => ipcRenderer.invoke('ledger:summary')
+  },
   tasks: {
     list: () => ipcRenderer.invoke('tasks:list'),
     create: (title: string, description?: string) => ipcRenderer.invoke('tasks:create', title, description),

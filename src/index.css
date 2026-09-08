@@ -487,6 +487,54 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); }
 .cost-table th { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-dim); background: var(--bg-2); font-weight: 600; }
 .cost-table tbody tr:hover td { background: var(--bg-2); }
 
+.cost-section { padding: 12px 24px; }
+.cost-section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.daily-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 120px;
+  padding: 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.daily-bar-wrap {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  min-width: 8px;
+  cursor: default;
+}
+.daily-bar {
+  width: 100%;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+  transition: opacity 0.1s;
+  opacity: 0.75;
+}
+.daily-bar-wrap:hover .daily-bar { opacity: 1; }
+.daily-label {
+  font-size: 9px;
+  color: var(--fg-dim);
+  margin-top: 4px;
+  font-family: ui-monospace, monospace;
+  transform: rotate(-45deg);
+  transform-origin: right top;
+  white-space: nowrap;
+}
+
 /* Kanban */
 .kanban {
   display: grid;

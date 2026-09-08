@@ -28,6 +28,7 @@ async function completeTasksForAgent(workspacePath: string, agentId: string): Pr
   }
 }
 import { runPmAgent, getPmState, clearPmChat, bindPmSender } from './pmagent'
+import { readLedger, summarize } from './ledger'
 import { readSummary, writeSummary, summaryLastModified } from './context'
 import { readContext, writeContext } from './context'
 import { bindSender, startAgent, continueAgent, killAgent, listAgents, ensureAgent, getAgent, emit, hydrateAgentsFromWorkspace, spawnAgent, closeAgent } from './agent'
@@ -132,6 +133,13 @@ function registerIpc(): void {
     await updateTask(cfg.workspacePath, taskId, { assignedTo: agentId, status: 'in_progress' })
     startAgent(agentId, task.title + (task.description ? '\n\n' + task.description : '')).catch(err => console.error('start error', err))
     return { ok: true }
+  })
+
+  ipcMain.handle('ledger:summary', async () => {
+    const cfg = getConfig()
+    if (!cfg.workspacePath) return null
+    const entries = await readLedger(cfg.workspacePath).catch(() => [])
+    return summarize(entries)
   })
 
   ipcMain.handle('models:pricing', async () => {

@@ -23,6 +23,13 @@ export interface TokenUsage {
   total: number
 }
 
+export interface LedgerTotals {
+  prompt: number
+  completion: number
+  total: number
+  cost: number
+}
+
 export interface AgentState {
   id: string
   status: AgentStatus
@@ -75,6 +82,15 @@ declare global {
       }
       models: {
         pricing: () => Promise<Record<string, { prompt: number; completion: number }>>
+      }
+      ledger: {
+        summary: () => Promise<{
+          totals: { all: LedgerTotals; today: LedgerTotals; last7d: LedgerTotals }
+          bySource: Array<{ source: string; totals: LedgerTotals }>
+          byModel: Array<{ model: string; totals: LedgerTotals }>
+          byDay: Array<{ date: string; totals: LedgerTotals }>
+          entryCount: number
+        } | null>
       }
       tasks: {
         list: () => Promise<Array<{ id: string; title: string; description?: string; status: string; assignedTo?: string | null; branch?: string | null; proposed?: boolean; proposedBy?: string; createdAt: string; updatedAt: string }>>

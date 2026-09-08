@@ -8,6 +8,8 @@ import { readContext, readAgentsGuide, readSummary } from './context'
 import { getConfig } from './config'
 import { saveAgent, loadAgents } from './persistence'
 import { siblingsSummary, buildSystemPrompt } from './agent-prompt'
+import { appendLedgerEntry, estimateCost } from './ledger'
+import { getPricing } from './pricing'
 
 const agents = new Map<string, AgentState>()
 const agentAborts = new Map<string, AbortController>()
@@ -140,6 +142,25 @@ async function runLoop(agent: AgentState): Promise<void> {
       if (nextUsage !== agent.usage) {
         agent.usage = nextUsage
         emit({ agentId: agent.id, type: 'usage', data: agent.usage })
+      }
+
+      // Log this turn to the persistent cost ledger (fire-and-forget)
+      if (usage && cfg.workspacePath) {
+        const modelForLedger = agent.pinnedModel ?? modelForCall.split(',')[0].trim()
+        getPricing().then(pricing => {
+          const cost = estimateCost(modelForLedger, usage.prompt_tokens ?? 0, usage.completion_tokens ?? 0, pricing)
+          return appendLedgerEntry(cfg.workspacePath!, {
+            timestamp: new Date().toISOString(),
+            source: agent.id,
+            model: modelForLedger,
+            branch: agent.branch,
+            task: agent.task,
+            prompt_tokens: usage.prompt_tokens ?? 0,
+            completion_tokens: usage.completion_tokens ?? 0,
+            total_tokens: usage.total_tokens ?? 0,
+            cost_usd: cost
+          })
+        }).catch(err => console.error('[vibe] ledger write failed', err))
       }
 
       if (!message.toolCalls || message.toolCalls.length === 0) {

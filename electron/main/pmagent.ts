@@ -8,6 +8,8 @@ import type { Message, TokenUsage } from './types'
 import { chatCompletion } from './providers'
 import { getConfig } from './config'
 import { executeToolCalls, accumulateUsage, pinnedModelFor } from './tool-loop'
+import { appendLedgerEntry, estimateCost } from './ledger'
+import { getPricing } from './pricing'
 import { readContext, readSummary, writeSummary, summaryLastModified } from './context'
 import { createTask, loadTasks, updateTask } from './tasks'
 
@@ -264,6 +266,25 @@ async function runPmLoop(workspace: string, model: string, kickoff: string): Pro
     if (nextUsage !== state.usage) {
       state.usage = nextUsage
       emit('usage', state.usage)
+    }
+
+    // Log to persistent ledger
+    if (usage) {
+      const modelForLedger = state.pinnedModel ?? model.split(',')[0].trim()
+      getPricing().then(pricing => {
+        const cost = estimateCost(modelForLedger, usage.prompt_tokens ?? 0, usage.completion_tokens ?? 0, pricing)
+        return appendLedgerEntry(workspace, {
+          timestamp: new Date().toISOString(),
+          source: 'pm-agent',
+          model: modelForLedger,
+          branch: null,
+          task: kickoff.slice(0, 80),
+          prompt_tokens: usage.prompt_tokens ?? 0,
+          completion_tokens: usage.completion_tokens ?? 0,
+          total_tokens: usage.total_tokens ?? 0,
+          cost_usd: cost
+        })
+      }).catch(err => console.error('[vibe] pm ledger write failed', err))
     }
 
     if (!message.toolCalls || message.toolCalls.length === 0) break

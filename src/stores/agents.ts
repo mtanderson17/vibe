@@ -71,11 +71,22 @@ export const useAgents = create<AgentsStore>((set) => ({
         break
       }
       case 'stream_end': {
-        // Replace the streaming placeholder with the final fully-parsed message
+        // Replace the streaming placeholder with the final fully-parsed message.
+        // Defensive: if the accumulated placeholder content is longer than the
+        // final's (e.g. streaming parser recovered more text than the final
+        // response accumulator did — happens with some OpenAI-compat providers
+        // that emit content twice or truncate their aggregate), keep the longer.
         const final = event.data as Message
         const lastIdx = updated.messages.length - 1
-        if (lastIdx >= 0 && updated.messages[lastIdx].role === 'assistant') {
-          updated.messages[lastIdx] = final
+        const placeholder = lastIdx >= 0 ? updated.messages[lastIdx] : null
+        if (placeholder && placeholder.role === 'assistant') {
+          const accumulated = placeholder.content ?? ''
+          const finalContent = final.content ?? ''
+          const bestContent = accumulated.length > finalContent.length ? accumulated : finalContent
+          updated.messages[lastIdx] = {
+            ...final,
+            content: bestContent || final.content
+          }
         } else {
           updated.messages.push(final)
         }

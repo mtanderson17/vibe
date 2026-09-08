@@ -1,129 +1,169 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useAgents } from './stores/agents'
-import type { AgentState } from './types'
+import { useEffect, useState, useCallback } from 'react'
+import type { LedgerTotals } from './types'
 
-interface Props { agentIds: string[] }
-
-type Pricing = Record<string, { prompt: number; completion: number }>
-
-// Public Anthropic pricing as of late 2025, per-token USD. Used as a fallback when
-// the OpenRouter /models table doesn't include the exact anthropic/* slug that a
-// BYOK-Anthropic user is running against. Update as Anthropic changes their pricing.
-const ANTHROPIC_FALLBACK: Pricing = {
-  'anthropic/claude-opus-4-7':      { prompt: 0.000015, completion: 0.000075 },
-  'anthropic/claude-opus-4-6':      { prompt: 0.000015, completion: 0.000075 },
-  'anthropic/claude-sonnet-4-6':    { prompt: 0.000003, completion: 0.000015 },
-  'anthropic/claude-sonnet-4-5':    { prompt: 0.000003, completion: 0.000015 },
-  'anthropic/claude-haiku-4-5':     { prompt: 0.000001, completion: 0.000005 },
-  'anthropic/claude-haiku-4-5-20251001': { prompt: 0.000001, completion: 0.000005 }
+interface Summary {
+  totals: { all: LedgerTotals; today: LedgerTotals; last7d: LedgerTotals }
+  bySource: Array<{ source: string; totals: LedgerTotals }>
+  byModel: Array<{ model: string; totals: LedgerTotals }>
+  byDay: Array<{ date: string; totals: LedgerTotals }>
+  entryCount: number
 }
 
-function costOf(usage: AgentState['usage'], model: string | undefined, pricing: Pricing): number {
-  if (!usage || !model) return 0
-  const p = pricing[model] ?? ANTHROPIC_FALLBACK[model]
-  if (!p) return 0
-  return usage.prompt * p.prompt + usage.completion * p.completion
-}
-
-function fmtDollars(n: number): string {
+function fmt$(n: number): string {
   if (n === 0) return '$0.00'
+  if (n < 0.0001) return `$${n.toExponential(2)}`
   if (n < 0.01) return `$${n.toFixed(6)}`
   if (n < 1) return `$${n.toFixed(4)}`
   return `$${n.toFixed(2)}`
 }
 
-export default function CostView({ agentIds }: Props) {
-  const agents = useAgents(s => s.agents)
-  const [pricing, setPricing] = useState<Pricing>({})
-  const [loaded, setLoaded] = useState(false)
+function fmtNum(n: number): string {
+  return n.toLocaleString()
+}
 
-  useEffect(() => {
-    window.vibe.models.pricing().then(p => { setPricing(p); setLoaded(true) })
+export default function CostView() {
+  const [summary, setSummary] = useState<Summary | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const refresh = useCallback(async () => {
+    const s = await window.vibe.ledger.summary()
+    setSummary(s)
+    setLoading(false)
   }, [])
 
-  const rows = useMemo(() => agentIds.map(id => {
-    const a = agents[id]
-    if (!a) return { id, tokens: 0, cost: 0, model: '—', task: '—', status: 'idle' }
-    const usage = a.usage ?? { prompt: 0, completion: 0, total: 0 }
-    return {
-      id,
-      tokens: usage.total,
-      prompt: usage.prompt,
-      completion: usage.completion,
-      cost: costOf(a.usage, a.pinnedModel, pricing),
-      model: a.pinnedModel ?? '—',
-      task: a.task ?? '—',
-      status: a.status
-    }
-  }), [agents, agentIds, pricing])
-
-  const totalTokens = rows.reduce((s, r) => s + r.tokens, 0)
-  const totalCost = rows.reduce((s, r) => s + r.cost, 0)
-  const freeRatio = rows.filter(r => r.model.includes(':free') || r.model.startsWith('ollama/')).length / Math.max(1, rows.filter(r => r.tokens > 0).length)
+  useEffect(() => {
+    refresh()
+    // Refresh whenever an agent or PM event fires (new usage → new ledger entry)
+    const offAgent = window.vibe.onAgentEvent(e => {
+      if (e.type === 'usage') setTimeout(refresh, 500)
+    })
+    const offPm = window.vibe.onPmEvent(e => {
+      if (e.type === 'usage') setTimeout(refresh, 500)
+    })
+    // Also poll every 20s in case something's writing to the ledger while we're viewing
+    const t = setInterval(refresh, 20000)
+    return () => { offAgent(); offPm(); clearInterval(t) }
+  }, [refresh])
 
   return (
     <div className="screen">
       <div className="screen-header">
         <div>
-          <div className="screen-title">Cost Management</div>
+          <div className="screen-title">Cost</div>
           <div className="screen-subtitle">
-            Tokens + estimated cost per agent, current session. Pricing sourced from OpenRouter.
-            {!loaded && ' (loading pricing…)'}
+            All LLM spend recorded in <code>.vibe/cost.jsonl</code>. Persists across restarts and agent close/spawn.
           </div>
         </div>
+        <button onClick={refresh}>Refresh</button>
       </div>
 
-      <div className="cost-summary">
-        <div className="cost-card">
-          <div className="cost-card-label">Total tokens (session)</div>
-          <div className="cost-card-value">{totalTokens.toLocaleString()}</div>
-        </div>
-        <div className="cost-card">
-          <div className="cost-card-label">Total estimated cost</div>
-          <div className="cost-card-value">{fmtDollars(totalCost)}</div>
-        </div>
-        <div className="cost-card">
-          <div className="cost-card-label">Free-tier ratio</div>
-          <div className="cost-card-value">{Math.round(freeRatio * 100)}%</div>
-        </div>
-      </div>
+      {loading && <div style={{ padding: 20, opacity: 0.6 }}>Loading…</div>}
 
-      <div className="cost-table-wrap">
-        <table className="cost-table">
-          <thead>
-            <tr>
-              <th>Agent</th>
-              <th>Status</th>
-              <th>Task</th>
-              <th>Model</th>
-              <th style={{ textAlign: 'right' }}>Prompt tok</th>
-              <th style={{ textAlign: 'right' }}>Completion tok</th>
-              <th style={{ textAlign: 'right' }}>Total tok</th>
-              <th style={{ textAlign: 'right' }}>Est. cost</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(r => (
-              <tr key={r.id}>
-                <td><strong>{r.id}</strong></td>
-                <td><span className={`status-dot status-${r.status}`} style={{ marginRight: 6 }} />{r.status}</td>
-                <td style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.task}</td>
-                <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.model}</td>
-                <td style={{ textAlign: 'right' }}>{(r.prompt ?? 0).toLocaleString()}</td>
-                <td style={{ textAlign: 'right' }}>{(r.completion ?? 0).toLocaleString()}</td>
-                <td style={{ textAlign: 'right' }}>{r.tokens.toLocaleString()}</td>
-                <td style={{ textAlign: 'right' }}>{r.model.includes(':free') || r.model.startsWith('ollama/') ? 'free' : fmtDollars(r.cost)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {!loading && summary && summary.entryCount === 0 && (
+        <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)' }}>
+          No LLM calls yet. Spin up an agent and give it a task to start tracking cost.
+        </div>
+      )}
 
-      <div style={{ padding: '10px 20px', fontSize: 11, color: 'var(--fg-dim)' }}>
-        Notes: cost is estimated from OpenRouter published pricing at the time of load.
-        Local Ollama models are always $0. Free-tier models are $0 but subject to daily limits.
-        Session totals reset when an agent starts a new task.
+      {!loading && summary && summary.entryCount > 0 && (
+        <>
+          <div className="cost-summary">
+            <SummaryCard label="Today" totals={summary.totals.today} />
+            <SummaryCard label="Last 7 days" totals={summary.totals.last7d} />
+            <SummaryCard label="All time" totals={summary.totals.all} />
+          </div>
+
+          <div className="cost-section">
+            <div className="cost-section-title">By source</div>
+            <table className="cost-table">
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th style={{ textAlign: 'right' }}>Requests share</th>
+                  <th style={{ textAlign: 'right' }}>Tokens</th>
+                  <th style={{ textAlign: 'right' }}>Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.bySource.map(row => (
+                  <tr key={row.source}>
+                    <td><strong>{row.source}</strong></td>
+                    <td style={{ textAlign: 'right' }}>
+                      {Math.round(100 * row.totals.total / Math.max(1, summary.totals.all.total))}%
+                    </td>
+                    <td style={{ textAlign: 'right' }}>{fmtNum(row.totals.total)}</td>
+                    <td style={{ textAlign: 'right' }}>{fmt$(row.totals.cost)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="cost-section">
+            <div className="cost-section-title">By model</div>
+            <table className="cost-table">
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th style={{ textAlign: 'right' }}>Prompt tokens</th>
+                  <th style={{ textAlign: 'right' }}>Completion tokens</th>
+                  <th style={{ textAlign: 'right' }}>Total</th>
+                  <th style={{ textAlign: 'right' }}>Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.byModel.map(row => (
+                  <tr key={row.model}>
+                    <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{row.model}</td>
+                    <td style={{ textAlign: 'right' }}>{fmtNum(row.totals.prompt)}</td>
+                    <td style={{ textAlign: 'right' }}>{fmtNum(row.totals.completion)}</td>
+                    <td style={{ textAlign: 'right' }}>{fmtNum(row.totals.total)}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      {row.model.startsWith('ollama/') || row.model.includes(':free') ? 'free' : fmt$(row.totals.cost)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {summary.byDay.length > 0 && (
+            <div className="cost-section">
+              <div className="cost-section-title">Daily (last {summary.byDay.length} days)</div>
+              <DailyChart data={summary.byDay} />
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function SummaryCard({ label, totals }: { label: string; totals: LedgerTotals }) {
+  return (
+    <div className="cost-card">
+      <div className="cost-card-label">{label}</div>
+      <div className="cost-card-value">{fmt$(totals.cost)}</div>
+      <div style={{ fontSize: 11, color: 'var(--fg-dim)', marginTop: 4 }}>
+        {fmtNum(totals.total)} tokens
       </div>
+    </div>
+  )
+}
+
+function DailyChart({ data }: { data: Array<{ date: string; totals: LedgerTotals }> }) {
+  const maxCost = Math.max(...data.map(d => d.totals.cost), 0.0001)
+  return (
+    <div className="daily-chart">
+      {data.map(d => {
+        const heightPct = (d.totals.cost / maxCost) * 100
+        return (
+          <div key={d.date} className="daily-bar-wrap" title={`${d.date}: ${fmt$(d.totals.cost)} · ${fmtNum(d.totals.total)} tokens`}>
+            <div className="daily-bar" style={{ height: `${Math.max(2, heightPct)}%` }} />
+            <div className="daily-label">{d.date.slice(5)}</div>
+          </div>
+        )
+      })}
     </div>
   )
 }

@@ -152,7 +152,7 @@ export default function App() {
           </>
         )}
         {sidebarView === 'tasks' && <TasksView agentIds={agentIds} />}
-        {sidebarView === 'cost' && <CostView agentIds={agentIds} />}
+        {sidebarView === 'cost' && <CostView />}
         {sidebarView === 'context' && <ContextView />}
       </main>
     </div>

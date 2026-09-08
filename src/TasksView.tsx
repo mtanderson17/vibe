@@ -36,6 +36,8 @@ interface PmState {
 export default function TasksView({ agentIds }: Props) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [newTitle, setNewTitle] = useState('')
+  const [newDescription, setNewDescription] = useState('')
+  const [showDescription, setShowDescription] = useState(false)
   const [assignPickerFor, setAssignPickerFor] = useState<string | null>(null)
   const [pmState, setPmState] = useState<PmState>({ status: 'idle', lastRun: null, messages: [] })
   const [pmInput, setPmInput] = useState('')
@@ -77,8 +79,10 @@ export default function TasksView({ agentIds }: Props) {
 
   async function create() {
     if (!newTitle.trim()) return
-    await window.vibe.tasks.create(newTitle.trim())
+    await window.vibe.tasks.create(newTitle.trim(), newDescription.trim() || undefined)
     setNewTitle('')
+    setNewDescription('')
+    setShowDescription(false)
     refresh()
   }
 
@@ -120,15 +124,34 @@ export default function TasksView({ agentIds }: Props) {
           <div className="screen-title">Tasks</div>
           <div className="screen-subtitle">Discrete work items · assign to an agent to start it</div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            value={newTitle}
-            onChange={e => setNewTitle(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') create() }}
-            placeholder="New task title…"
-            style={{ width: 300 }}
-          />
-          <button className="primary" onClick={create} disabled={!newTitle.trim()}>Add task</button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 360 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              value={newTitle}
+              onChange={e => setNewTitle(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !showDescription) create()
+                if (e.key === 'Enter' && showDescription && (e.metaKey || e.ctrlKey)) create()
+              }}
+              onFocus={() => setShowDescription(true)}
+              placeholder="New task title…"
+              style={{ flex: 1 }}
+            />
+            <button className="primary" onClick={create} disabled={!newTitle.trim()}>Add task</button>
+          </div>
+          {showDescription && (
+            <textarea
+              value={newDescription}
+              onChange={e => setNewDescription(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) create()
+                if (e.key === 'Escape') { setShowDescription(false); setNewDescription('') }
+              }}
+              placeholder="Optional description — this gets sent to the agent as part of the task (Cmd/Ctrl+Enter to submit, Esc to hide)"
+              rows={3}
+              style={{ resize: 'vertical', fontSize: 12 }}
+            />
+          )}
         </div>
       </div>
 
