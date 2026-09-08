@@ -140,9 +140,12 @@ Being upfront about the state of the app while it's still stabilizing:
   often mis-format tool calls, hallucinate URLs into binary files, or ignore
   AGENTS.md guidance. This is a model-quality floor, not a Vibe bug. BYOK Anthropic
   or a paid OpenRouter tier fixes it.
-- **Sibling context is a snapshot at task start**, not refreshed mid-task. If
-  another agent starts or finishes while you're mid-conversation, the current
-  agent won't know until you start a new task.
+- **Sibling context refreshes on human re-engagement, not every turn.** Cost-
+  conservative: the current agent sees fresh sibling state (plus fresh project
+  summary and context) whenever you reply to it, but not on every internal loop
+  turn. If a sibling starts/finishes mid-turn, the current agent won't notice
+  until you re-engage. File-overlap warnings at merge time cover the practical
+  worst case regardless.
 - **PM agent runs on the same global model as coding agents.** No dedicated
   model-per-role yet (backlog: per-agent model override).
 - **Streaming re-renders more than they need to.** ControlCenter tiles are

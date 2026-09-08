@@ -277,6 +277,40 @@ export async function continueAgent(id: string, userInput: string): Promise<void
   if (agent.status !== 'awaiting_input' && agent.status !== 'awaiting_merge') {
     throw new Error(`Agent ${id} cannot accept follow-up (status: ${agent.status})`)
   }
+  const cfg = getConfig()
+
+  // Refresh the system message with current sibling/context/summary state.
+  // Only done here (on human re-engagement), not on every internal loop turn,
+  // to keep token cost bounded while still avoiding hours-stale prompts.
+  if (cfg.workspacePath && agent.worktreePath) {
+    try {
+      const [sharedContext, agentsGuide, summary] = await Promise.all([
+        readContext(cfg.workspacePath),
+        readAgentsGuide(cfg.workspacePath),
+        readSummary(cfg.workspacePath)
+      ])
+      const freshSystem: Message = {
+        role: 'system',
+        content: buildSystemPrompt({
+          agentsGuide,
+          sharedContext,
+          summary,
+          agentId: id,
+          worktreePath: agent.worktreePath,
+          siblings: siblingsSummary(id, agents.values())
+        })
+      }
+      // Replace the initial system message in place (must be at index 0).
+      if (agent.messages[0]?.role === 'system') {
+        agent.messages[0] = freshSystem
+      } else {
+        agent.messages.unshift(freshSystem)
+      }
+    } catch (e) {
+      console.warn('[vibe] failed to refresh system prompt on continue', e)
+    }
+  }
+
   const userMsg: Message = { role: 'user', content: userInput }
   agent.messages.push(userMsg)
   emit({ agentId: id, type: 'message', data: userMsg })
