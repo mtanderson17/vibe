@@ -240,6 +240,37 @@ export default function AgentPanel({ agentId }: Props) {
       </div>
 
       {(() => {
+        // If the agent hit the step limit, show a Continue button for one-click resume.
+        const hitLimit = agent.status === 'awaiting_input' &&
+          agent.messages[agent.messages.length - 1]?.role === 'system' &&
+          (agent.messages[agent.messages.length - 1].content ?? '').includes('Reached step limit')
+        if (hitLimit) {
+          return (
+            <div className="composer choice-composer">
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, color: 'var(--fg-dim)', marginBottom: 8 }}>
+                  Agent used its step budget. Continue with more runway, or send new instructions to redirect:
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <button
+                    className="primary"
+                    onClick={() => window.vibe.agents.continue(agentId, 'Continue.')}
+                    style={{ padding: '8px 14px' }}
+                  >
+                    Continue
+                  </button>
+                  <button
+                    onClick={() => window.vibe.agents.continue(agentId, 'Wrap up. Summarize what you did and call finish.')}
+                    style={{ padding: '8px 14px' }}
+                  >
+                    Wrap up &amp; finish
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        }
+
         // If the agent just called ask_human_choice, show clickable options instead
         // of the free-form composer. Click sends the chosen option as the continue input.
         const pendingChoice = isFollowUp ? findPendingChoice(agent.messages) : null

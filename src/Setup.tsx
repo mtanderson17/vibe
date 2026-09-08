@@ -107,6 +107,7 @@ export default function Setup({ config, onSaved }: Props) {
   const [workspace, setWorkspace] = useState(config.workspacePath ?? '')
   const [model, setModel] = useState(config.model)
   const [agentCount, setAgentCount] = useState(config.agentCount ?? 4)
+  const [maxSteps, setMaxSteps] = useState(config.maxSteps ?? 25)
   const [saving, setSaving] = useState(false)
   const [probing, setProbing] = useState(false)
   const [probeResults, setProbeResults] = useState<ProbeResult[]>([])
@@ -150,7 +151,8 @@ export default function Setup({ config, onSaved }: Props) {
       xaiApiKey: keys.xaiApiKey.trim() || null,
       workspacePath: workspace.trim() || null,
       model,
-      agentCount: Math.max(1, Math.min(8, agentCount))
+      agentCount: Math.max(1, Math.min(8, agentCount)),
+      maxSteps: Math.max(5, Math.min(200, maxSteps))
     }
     const next = await window.vibe.config.set(patch)
     setSaving(false)
@@ -211,6 +213,22 @@ export default function Setup({ config, onSaved }: Props) {
                 style={{ width: 100 }}
               />
               <p className="hint">More agents = more parallelism, more RAM, more API load.</p>
+            </div>
+
+            <div className="settings-field">
+              <label>Steps per agent turn budget (5–200)</label>
+              <input
+                type="number"
+                min={5}
+                max={200}
+                value={maxSteps}
+                onChange={e => setMaxSteps(parseInt(e.target.value) || 25)}
+                style={{ width: 100 }}
+              />
+              <p className="hint">
+                Max tool-call turns before an agent pauses for user input. Hitting the limit shows a
+                Continue button — click to add another {maxSteps} steps of runway.
+              </p>
             </div>
           </div>
         </section>

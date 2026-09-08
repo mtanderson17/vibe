@@ -128,12 +128,16 @@ async function runLoop(agent: AgentState): Promise<void> {
 
   agent.status = 'running'
   agent.maxSteps = cfg.maxSteps
+  // Each runLoop invocation gets a fresh step budget. Otherwise hitting the
+  // limit would freeze the agent — subsequent continues would start at maxSteps.
+  agent.step = 0
   emit({ agentId: agent.id, type: 'status', data: agent.status })
 
-  let steps = agent.step ?? 0
+  let steps = 0
   let calledFinish = false
   let stoppedForInput = false
   let killed = false
+  let hitLimit = false
 
   try {
     while (steps < cfg.maxSteps && !calledFinish && !stoppedForInput) {
@@ -209,6 +213,9 @@ async function runLoop(agent: AgentState): Promise<void> {
       if (result.stoppedForInput) stoppedForInput = true
       if (result.aborted) { killed = true; break }
     }
+    if (steps >= cfg.maxSteps && !calledFinish && !stoppedForInput && !killed) {
+      hitLimit = true
+    }
   } catch (e) {
     if (abort.signal.aborted) {
       killed = true
@@ -227,10 +234,16 @@ async function runLoop(agent: AgentState): Promise<void> {
     agent.status = 'awaiting_merge'
   } else {
     agent.status = 'awaiting_input'
+    if (hitLimit) {
+      agent.messages.push({
+        role: 'system',
+        content: `[Reached step limit (${cfg.maxSteps}). Click Continue to add another ${cfg.maxSteps} steps, or send a new instruction to redirect.]`
+      })
+    }
   }
 
   emit({ agentId: agent.id, type: 'status', data: agent.status })
-  emit({ agentId: agent.id, type: 'done', data: { steps, killed } })
+  emit({ agentId: agent.id, type: 'done', data: { steps, killed, hitLimit } })
   persist(agent)
 }
 
