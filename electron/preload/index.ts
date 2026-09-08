@@ -44,6 +44,21 @@ const api = {
     ipcRenderer.on('approval:request', listener)
     return () => ipcRenderer.off('approval:request', listener)
   },
+  onMenuCommand: (cb: (channel: string, ...args: unknown[]) => void) => {
+    const channels = [
+      'menu:new-agent', 'menu:close-agent', 'menu:settings',
+      'menu:view', 'menu:focus-next', 'menu:focus-prev',
+      'menu:stop-current', 'menu:pm-regenerate',
+      'menu:shortcuts', 'menu:palette'
+    ]
+    const handlers: Array<{ ch: string; fn: (_e: unknown, ...args: unknown[]) => void }> = []
+    for (const ch of channels) {
+      const fn = (_e: unknown, ...args: unknown[]) => cb(ch, ...args)
+      ipcRenderer.on(ch, fn)
+      handlers.push({ ch, fn })
+    }
+    return () => { for (const h of handlers) ipcRenderer.off(h.ch, h.fn) }
+  },
   workspace: {
     pick: () => ipcRenderer.invoke('workspace:pick')
   },

@@ -32,6 +32,7 @@ import { readLedger, summarize } from './ledger'
 import { bindApprovalSender, respondToApproval } from './approval'
 import { shutdownAllApps } from './launcher'
 import { listProviderModels } from './catalog'
+import { buildAppMenu } from './menu'
 import { readSummary, writeSummary, summaryLastModified } from './context'
 import { readContext, writeContext } from './context'
 import { bindSender, startAgent, continueAgent, killAgent, listAgents, ensureAgent, getAgent, emit, hydrateAgentsFromWorkspace, spawnAgent, closeAgent, setAgentModel, setAgentName } from './agent'
@@ -54,6 +55,7 @@ async function createWindow(): Promise<void> {
   bindSender(mainWindow.webContents)
   bindPmSender(mainWindow.webContents)
   bindApprovalSender(mainWindow.webContents)
+  buildAppMenu(mainWindow)
 
   // Hydrate persisted agents before renderer loads
   const cfg = getConfig()

@@ -119,6 +119,7 @@ declare global {
         respond: (id: string, approved: boolean) => Promise<void>
       }
       onApprovalRequest: (cb: (req: { id: string; agentId: string; command: string; reason: string }) => void) => () => void
+      onMenuCommand: (cb: (channel: string, ...args: unknown[]) => void) => () => void
       workspace: { pick: () => Promise<string | null> }
       context: {
         read: () => Promise<string>

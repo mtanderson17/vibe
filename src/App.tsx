@@ -9,6 +9,7 @@ import TasksView from './TasksView'
 import ControlCenter from './ControlCenter'
 import Icon, { type IconName } from './Icon'
 import CommandPalette, { type Command } from './components/CommandPalette'
+import ShortcutsModal from './components/ShortcutsModal'
 
 type SidebarView = 'control' | 'tasks' | 'cost' | 'context' | 'settings'
 
@@ -25,6 +26,7 @@ export default function App() {
   const [focusedAgent, setFocusedAgent] = useState<string | null>(null)
   const [approvals, setApprovals] = useState<ApprovalReq[]>([])
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const agentSummaries = useAgents(s => s.agents)
   const applyEvent = useAgents(s => s.applyEvent)
   const hydrate = useAgents(s => s.hydrate)
@@ -53,12 +55,17 @@ export default function App() {
     return off
   }, [])
 
-  // Cmd+K / Ctrl+K to open the command palette
+  // Cmd+K to open the command palette; Cmd+/ shortcuts help.
+  // Other shortcuts are wired via the app menu (see menu.ts) which delivers via onMenuCommand.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setPaletteOpen(prev => !prev)
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+        e.preventDefault()
+        setShortcutsOpen(prev => !prev)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -99,6 +106,42 @@ export default function App() {
   }, [agentSummaries, focusedAgent, removeAgent])
 
   const handleFocus = useCallback((id: string) => setFocusedAgent(id), [])
+
+  // Menu commands (from the native app menu). Placed after agentIds/handleClose/handleSpawn
+  // declarations to satisfy TDZ in the closure.
+  useEffect(() => {
+    const off = window.vibe.onMenuCommand((channel, ...args) => {
+      switch (channel) {
+        case 'menu:new-agent':      handleSpawn(); break
+        case 'menu:close-agent':    if (focusedAgent) handleClose(focusedAgent); break
+        case 'menu:settings':       setSidebarView('settings'); break
+        case 'menu:view': {
+          const view = args[0] as SidebarView
+          setSidebarView(view); setFocusedAgent(null); break
+        }
+        case 'menu:focus-next': {
+          const cur = agentIds.indexOf(focusedAgent ?? '')
+          if (agentIds.length) { setSidebarView('control'); setFocusedAgent(agentIds[(cur + 1) % agentIds.length]) }
+          break
+        }
+        case 'menu:focus-prev': {
+          const cur = agentIds.indexOf(focusedAgent ?? '')
+          if (agentIds.length) {
+            setSidebarView('control')
+            setFocusedAgent(agentIds[(cur - 1 + agentIds.length) % agentIds.length])
+          }
+          break
+        }
+        case 'menu:stop-current':
+          if (focusedAgent) window.vibe.agents.kill(focusedAgent)
+          break
+        case 'menu:pm-regenerate': window.vibe.pm.run('manual'); break
+        case 'menu:shortcuts':     setShortcutsOpen(true); break
+        case 'menu:palette':       setPaletteOpen(prev => !prev); break
+      }
+    })
+    return off
+  }, [agentIds, focusedAgent, handleClose, handleSpawn])
 
   const commands: Command[] = useMemo(() => {
     const cmds: Command[] = []
@@ -146,6 +189,9 @@ export default function App() {
     // PM
     cmds.push({ id: 'pm.regenerate', label: 'Regenerate project summary (PM)', group: 'PM', run: () => { window.vibe.pm.run('manual') } })
     cmds.push({ id: 'pm.clear', label: 'Clear PM chat', group: 'PM', run: () => { window.vibe.pm.clear() } })
+
+    // Help
+    cmds.push({ id: 'help.shortcuts', label: 'Show keyboard shortcuts', hint: `${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+/`, group: 'Help', run: () => setShortcutsOpen(true) })
 
     return cmds
   }, [agentIds, agentSummaries, atAgentCap, handleClose, handleSpawn])
@@ -235,6 +281,7 @@ export default function App() {
       </main>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
+      <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
       {approvals.length > 0 && (
         <div className="approval-overlay">
