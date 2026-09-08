@@ -9,7 +9,7 @@ import { chatCompletion } from './providers'
 import { getConfig } from './config'
 import { executeToolCalls, accumulateUsage, pinnedModelFor } from './tool-loop'
 import { readContext, readSummary, writeSummary, summaryLastModified } from './context'
-import { createTask, loadTasks } from './tasks'
+import { createTask, loadTasks, updateTask } from './tasks'
 
 const exec = promisify(execFile)
 
@@ -99,8 +99,24 @@ const PM_TOOL_SCHEMAS = [
     type: 'function',
     function: {
       name: 'list_current_tasks',
-      description: 'Return the current tasks list so you can see what already exists before proposing new ones.',
+      description: 'Return the current tasks list (including task IDs) so you can see what already exists before proposing new ones or updating them.',
       parameters: { type: 'object', properties: {} }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_task_status',
+      description: 'Change a task\'s status. Common uses: reset an abandoned in_progress task back to backlog after the assigned agent was killed; mark a task done that was completed outside Vibe. Get task IDs from list_current_tasks first.',
+      parameters: {
+        type: 'object',
+        properties: {
+          task_id: { type: 'string', description: 'The task id (e.g. "task-lg8x2f-abc1")' },
+          status: { type: 'string', enum: ['backlog', 'in_progress', 'awaiting_merge', 'done'] },
+          unassign: { type: 'boolean', description: 'If true, also clear the assignedTo field. Use when resetting to backlog.' }
+        },
+        required: ['task_id', 'status']
+      }
     }
   },
   {
@@ -162,7 +178,16 @@ async function executePmTool(
     case 'list_current_tasks': {
       const tasks = await loadTasks(workspace)
       if (!tasks.length) return '(no tasks)'
-      return tasks.map(t => `[${t.status}${t.proposed ? '/proposed' : ''}] ${t.title}${t.assignedTo ? ` → ${t.assignedTo}` : ''}`).join('\n')
+      return tasks
+        .map(t => `${t.id} [${t.status}${t.proposed ? '/proposed' : ''}] ${t.title}${t.assignedTo ? ` → ${t.assignedTo}` : ''}`)
+        .join('\n')
+    }
+    case 'update_task_status': {
+      const patch: Record<string, unknown> = { status: String(args.status) }
+      if (args.unassign) patch.assignedTo = null
+      const updated = await updateTask(workspace, String(args.task_id), patch)
+      if (!updated) return `[error] task ${args.task_id} not found`
+      return `Updated ${updated.id}: status=${updated.status}${args.unassign ? ' (unassigned)' : ''}`
     }
     case 'finish':
       return `Done: ${args.summary}`

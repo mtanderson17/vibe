@@ -31,7 +31,11 @@ export const useAgents = create<AgentsStore>((set) => ({
     return { agents: next, focused: state.focused === id ? '' : state.focused }
   }),
   applyEvent: (event) => set(state => {
-    const a = state.agents[event.agentId] ?? emptyAgent(event.agentId)
+    // Ignore events for agents that have been closed/removed.
+    // Otherwise a late status/stream event from the still-winding-down loop
+    // would resurrect the deleted agent in the UI.
+    const a = state.agents[event.agentId]
+    if (!a) return state
     const updated: AgentState = { ...a, messages: [...a.messages] }
 
     switch (event.type) {

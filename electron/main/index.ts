@@ -5,6 +5,28 @@ import { ensureRepo, mergeBranch, abortMerge, removeWorktree, deleteBranch, bran
 import { resolveConflicts, applyResolution, commitResolution } from './resolver'
 import { probeOpenRouterFree, detectOllama } from './probe'
 import { loadTasks, createTask, updateTask, deleteTask } from './tasks'
+
+// Reset any tasks assigned to `agentId` back to backlog (used when an agent is
+// closed/killed mid-task so the work isn't stranded).
+async function unassignTasksForAgent(workspacePath: string, agentId: string): Promise<void> {
+  const tasks = await loadTasks(workspacePath).catch(() => [])
+  for (const t of tasks) {
+    if (t.assignedTo === agentId && t.status !== 'done') {
+      await updateTask(workspacePath, t.id, { assignedTo: null, status: 'backlog' }).catch(() => {})
+    }
+  }
+}
+
+// Mark tasks assigned to `agentId` as done (used when an agent's branch was
+// successfully merged into main).
+async function completeTasksForAgent(workspacePath: string, agentId: string): Promise<void> {
+  const tasks = await loadTasks(workspacePath).catch(() => [])
+  for (const t of tasks) {
+    if (t.assignedTo === agentId && t.status !== 'done') {
+      await updateTask(workspacePath, t.id, { status: 'done' }).catch(() => {})
+    }
+  }
+}
 import { runPmAgent, getPmState, clearPmChat, bindPmSender } from './pmagent'
 import { readSummary, writeSummary, summaryLastModified } from './context'
 import { readContext, writeContext } from './context'
@@ -165,6 +187,9 @@ function registerIpc(): void {
     closeAgent(id)
     if (cfg.workspacePath) {
       await deleteAgentFile(cfg.workspacePath, id).catch(() => {})
+      // Reset any in-progress tasks assigned to this agent back to backlog so
+      // they can be reassigned instead of being stranded.
+      await unassignTasksForAgent(cfg.workspacePath, id).catch(() => {})
     }
 
     // Background work: git worktree removal + branch delete are slow on Windows (~1-3s each).
@@ -222,6 +247,8 @@ function registerIpc(): void {
       agent.branch = null
       agent.worktreePath = null
       await saveAgent(cfg.workspacePath, agent).catch(err => console.error('[vibe] persist merged failed', err))
+      // Move the assigned task (if any) to done on the kanban.
+      await completeTasksForAgent(cfg.workspacePath, id).catch(() => {})
       emit({ agentId: id, type: 'status', data: 'merged' })
       runPmAgent('merge').catch(err => console.error('[vibe] pm-agent post-merge failed', err))
     }
@@ -262,6 +289,7 @@ function registerIpc(): void {
     agent.branch = null
     agent.worktreePath = null
     await saveAgent(cfg.workspacePath, agent).catch(err => console.error('[vibe] persist merged failed', err))
+    await completeTasksForAgent(cfg.workspacePath, id).catch(() => {})
     emit({ agentId: id, type: 'status', data: 'merged' })
     return { ok: true }
   })
