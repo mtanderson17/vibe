@@ -1,11 +1,13 @@
 import type { WebContents } from 'electron'
 import type { AgentEvent, AgentState, Message } from './types'
-import { chatCompletion, shortCompletion } from './openrouter'
-import { executeTool, killAgentProcesses } from './tools'
+import { chatCompletion, shortCompletion } from './providers'
+import { executeTool, killAgentProcesses, TOOL_SCHEMAS } from './tools'
+import { executeToolCalls, accumulateUsage, pinnedModelFor } from './tool-loop'
 import { createWorktree, commitAll } from './git'
 import { readContext, readAgentsGuide, readSummary } from './context'
 import { getConfig } from './config'
 import { saveAgent, loadAgents } from './persistence'
+import { siblingsSummary, buildSystemPrompt } from './agent-prompt'
 
 const agents = new Map<string, AgentState>()
 const agentAborts = new Map<string, AbortController>()
@@ -77,11 +79,11 @@ function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40) || 'task'
 }
 
-async function generateSlug(apiKey: string, model: string, task: string): Promise<string> {
+async function generateSlug(cfg: ReturnType<typeof getConfig>, task: string): Promise<string> {
   try {
     const raw = await shortCompletion(
-      apiKey,
-      model,
+      { openrouter: cfg.openrouterApiKey, anthropic: cfg.anthropicApiKey },
+      cfg.model,
       'You turn task descriptions into concise git branch slugs. Output ONLY the slug, no explanation. Format: 2-5 lowercase words joined by hyphens. Examples: "add-pause", "fix-clear-lines-bug", "scaffold-api", "write-tests".',
       task
     )
@@ -91,51 +93,10 @@ async function generateSlug(apiKey: string, model: string, task: string): Promis
   return slugify(task)
 }
 
-function siblingsSummary(currentId: string): string {
-  const others = Array.from(agents.values()).filter(a =>
-    a.id !== currentId &&
-    (a.status === 'running' || a.status === 'awaiting_input' || a.status === 'awaiting_merge')
-  )
-  if (others.length === 0) return '(no other agents active)'
-  return others.map(a => `- ${a.id} [${a.status}] on branch \`${a.branch ?? '?'}\`: ${a.task ?? '(no task)'}`).join('\n')
-}
-
-function buildSystemPrompt(
-  agentsGuide: string,
-  sharedContext: string,
-  summary: string,
-  agentId: string,
-  worktreePath: string
-): string {
-  return `${agentsGuide}
-
----
-
-# Project Context
-${sharedContext}
-
----
-
-# Recent Project State (maintained by PM agent)
-${summary}
-
----
-
-# Concurrent Agents
-Other agents may be working on this same codebase in parallel branches. Be mindful
-if your changes might overlap with theirs — you'll get merge conflicts otherwise.
-${siblingsSummary(agentId)}
-
----
-
-# Your Session
-- You are agent: ${agentId}
-- Your worktree root: ${worktreePath}`
-}
+// siblingsSummary + buildSystemPrompt are now in ./agent-prompt for testability.
 
 async function runLoop(agent: AgentState): Promise<void> {
   const cfg = getConfig()
-  if (!cfg.openrouterApiKey) throw new Error('OpenRouter API key not set')
   if (!agent.worktreePath) throw new Error('Agent has no worktree')
 
   const abort = new AbortController()
@@ -161,35 +122,23 @@ async function runLoop(agent: AgentState): Promise<void> {
       const modelForCall = agent.pinnedModel ?? cfg.model
 
       emit({ agentId: agent.id, type: 'stream_start', data: null })
-      const { message, usage } = await chatCompletion(
-        cfg.openrouterApiKey,
-        modelForCall,
-        agent.messages,
-        abort.signal,
-        (delta) => emit({ agentId: agent.id, type: 'stream_delta', data: delta })
-      )
+      const { message, usage } = await chatCompletion({
+        keys: { openrouter: cfg.openrouterApiKey, anthropic: cfg.anthropicApiKey },
+        model: modelForCall,
+        messages: agent.messages,
+        tools: TOOL_SCHEMAS as unknown as Array<Record<string, unknown>>,
+        signal: abort.signal,
+        onDelta: (delta) => emit({ agentId: agent.id, type: 'stream_delta', data: delta })
+      })
       emit({ agentId: agent.id, type: 'stream_end', data: message })
 
       agent.messages.push(message)
 
-      // Pin the model to whichever one actually served the first turn.
-      // Only pin for multi-slug (fallback chain) configs — single-slug configs are
-      // already unambiguous and pinning would strip provider prefixes (e.g. "ollama/").
-      const slugs = cfg.model.split(',').map(s => s.trim()).filter(Boolean)
-      if (!agent.pinnedModel && message.servedBy && slugs.length > 1) {
-        // Prefer the matching configured slug (preserves ollama/ prefix, :free suffix, etc.)
-        const match = slugs.find(s => s === message.servedBy || s.endsWith('/' + message.servedBy))
-        agent.pinnedModel = match ?? message.servedBy
-      }
+      agent.pinnedModel = pinnedModelFor(agent.pinnedModel, cfg.model, message.servedBy)
 
-      // Accumulate token usage for the current task
-      if (usage) {
-        const prev = agent.usage ?? { prompt: 0, completion: 0, total: 0 }
-        agent.usage = {
-          prompt: prev.prompt + (usage.prompt_tokens ?? 0),
-          completion: prev.completion + (usage.completion_tokens ?? 0),
-          total: prev.total + (usage.total_tokens ?? 0)
-        }
+      const nextUsage = accumulateUsage(agent.usage, usage)
+      if (nextUsage !== agent.usage) {
+        agent.usage = nextUsage
         emit({ agentId: agent.id, type: 'usage', data: agent.usage })
       }
 
@@ -198,27 +147,17 @@ async function runLoop(agent: AgentState): Promise<void> {
         break
       }
 
-      for (const call of message.toolCalls) {
-        if (abort.signal.aborted) { killed = true; break }
-        emit({ agentId: agent.id, type: 'tool_call', data: call })
-        let result: string
-        try {
-          result = await executeTool(agent.worktreePath, call.name, call.arguments, agent.id)
-        } catch (e) {
-          result = `[error] ${(e as Error).message}`
-        }
-        const toolMsg: Message = {
-          role: 'tool',
-          content: result,
-          toolCallId: call.id,
-          name: call.name
-        }
-        agent.messages.push(toolMsg)
-        emit({ agentId: agent.id, type: 'tool_result', data: { call, result } })
-
-        if (call.name === 'finish') calledFinish = true
-        if (call.name === 'ask_human') { stoppedForInput = true; break }
-      }
+      const result = await executeToolCalls({
+        toolCalls: message.toolCalls,
+        execute: (name, args) => executeTool(agent.worktreePath!, name, args, agent.id),
+        onToolCall: (call) => emit({ agentId: agent.id, type: 'tool_call', data: call }),
+        onToolResult: (call, res) => emit({ agentId: agent.id, type: 'tool_result', data: { call, result: res } }),
+        abortSignal: abort.signal
+      })
+      agent.messages.push(...result.messages)
+      if (result.calledFinish) calledFinish = true
+      if (result.stoppedForInput) stoppedForInput = true
+      if (result.aborted) { killed = true; break }
     }
   } catch (e) {
     if (abort.signal.aborted) {
@@ -246,15 +185,24 @@ async function runLoop(agent: AgentState): Promise<void> {
 }
 
 export function killAgent(id: string): void {
+  const agent = agents.get(id)
   const abort = agentAborts.get(id)
   if (abort) abort.abort()
   killAgentProcesses(id)
+  // Immediately reflect the killed state so the UI feels instant, instead of
+  // waiting for the runLoop's current fetch to detect the abort (can be 1-3s).
+  if (agent && agent.status === 'running') {
+    agent.status = 'awaiting_input'
+    emit({ agentId: id, type: 'status', data: 'awaiting_input' })
+  }
 }
 
 export async function startAgent(id: string, task: string): Promise<void> {
   const cfg = getConfig()
   if (!cfg.workspacePath) throw new Error('Workspace not set')
-  if (!cfg.openrouterApiKey) throw new Error('OpenRouter API key not set')
+  if (!cfg.openrouterApiKey && !cfg.anthropicApiKey && !cfg.model.startsWith('ollama/')) {
+    throw new Error('No API key configured (need OpenRouter, Anthropic, or Ollama model)')
+  }
 
   const agent = ensureAgent(id)
   if (agent.status === 'running') throw new Error(`Agent ${id} already running`)
@@ -268,7 +216,7 @@ export async function startAgent(id: string, task: string): Promise<void> {
   emit({ agentId: id, type: 'status', data: agent.status })
 
   try {
-    const slug = await generateSlug(cfg.openrouterApiKey, cfg.model, task)
+    const slug = await generateSlug(cfg, task)
     const { worktreePath, branch } = await createWorktree(cfg.workspacePath, id, slug)
     agent.worktreePath = worktreePath
     agent.branch = branch
@@ -281,7 +229,14 @@ export async function startAgent(id: string, task: string): Promise<void> {
     ])
     const systemMsg: Message = {
       role: 'system',
-      content: buildSystemPrompt(agentsGuide, sharedContext, summary, id, worktreePath)
+      content: buildSystemPrompt({
+        agentsGuide,
+        sharedContext,
+        summary,
+        agentId: id,
+        worktreePath,
+        siblings: siblingsSummary(id, agents.values())
+      })
     }
     const userMsg: Message = { role: 'user', content: task }
     agent.messages.push(systemMsg, userMsg)

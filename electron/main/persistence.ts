@@ -25,12 +25,29 @@ export async function loadAgents(workspacePath: string): Promise<AgentState[]> {
     try {
       const raw = await readFile(path.join(dir, name), 'utf8')
       const parsed = JSON.parse(raw) as AgentState
-      // Sanity: force any "running" state to awaiting_input (loop can't be mid-flight after restart)
-      if (parsed.status === 'running') parsed.status = 'awaiting_input'
-      results.push(parsed)
+      results.push(sanitizeHydratedAgent(parsed))
     } catch { /* skip corrupt file */ }
   }
   return results
+}
+
+// Rehydration invariants: nothing that only makes sense while the process was running
+// should survive a restart. If a branch/worktree ref points to something that doesn't
+// exist anymore, drop the ref and downgrade status.
+export function sanitizeHydratedAgent(agent: AgentState): AgentState {
+  const out: AgentState = { ...agent }
+
+  // Loop can't be mid-flight after restart.
+  if (out.status === 'running') out.status = 'awaiting_input'
+
+  // Worktree path should exist. If not, the git cleanup already ran or the workspace was
+  // moved — either way we shouldn't offer to merge from it.
+  if (out.worktreePath && !existsSync(out.worktreePath)) {
+    out.worktreePath = null
+    out.branch = null
+    if (out.status === 'awaiting_merge') out.status = 'merged'
+  }
+  return out
 }
 
 export async function deleteAgentFile(workspacePath: string, id: string): Promise<void> {

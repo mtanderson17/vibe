@@ -29,6 +29,7 @@ const STATUS_LABELS: Record<ProbeResult['status'], { text: string; color: string
 
 export default function Setup({ config, onSaved }: Props) {
   const [apiKey, setApiKey] = useState(config.openrouterApiKey ?? '')
+  const [anthropicKey, setAnthropicKey] = useState(config.anthropicApiKey ?? '')
   const [workspace, setWorkspace] = useState(config.workspacePath ?? '')
   const [model, setModel] = useState(config.model)
   const [agentCount, setAgentCount] = useState(config.agentCount ?? 4)
@@ -71,6 +72,7 @@ export default function Setup({ config, onSaved }: Props) {
     setSaving(true)
     const next = await window.vibe.config.set({
       openrouterApiKey: apiKey.trim() || null,
+      anthropicApiKey: anthropicKey.trim() || null,
       workspacePath: workspace.trim() || null,
       model,
       agentCount: Math.max(1, Math.min(8, agentCount))
@@ -79,7 +81,8 @@ export default function Setup({ config, onSaved }: Props) {
     onSaved(next)
   }
 
-  const ready = (apiKey.trim() || ollama?.available) && workspace.trim() && model.trim()
+  const hasAnyProvider = apiKey.trim() || anthropicKey.trim() || ollama?.available
+  const ready = hasAnyProvider && workspace.trim() && model.trim()
 
   return (
     <div className="setup">
@@ -122,6 +125,21 @@ export default function Setup({ config, onSaved }: Props) {
         </div>
         <p style={{ fontSize: 11, marginTop: 4 }}>
           Free at <span style={{ color: 'var(--accent)' }}>openrouter.ai</span> — no credit card required.
+        </p>
+      </div>
+
+      <div className="field">
+        <label>Anthropic API key (optional, BYOK for frontier quality)</label>
+        <input
+          type="password"
+          value={anthropicKey}
+          onChange={e => setAnthropicKey(e.target.value)}
+          placeholder="sk-ant-api03-..."
+        />
+        <p style={{ fontSize: 11, marginTop: 4 }}>
+          Get one at <span style={{ color: 'var(--accent)' }}>console.anthropic.com</span>. Then use models like{' '}
+          <code>anthropic/claude-sonnet-4-6</code> or <code>anthropic/claude-haiku-4-5</code> in the model field below.
+          Uses Anthropic's OpenAI-compatible endpoint.
         </p>
       </div>
 

@@ -5,8 +5,9 @@ import { promisify } from 'node:util'
 import path from 'node:path'
 import type { WebContents } from 'electron'
 import type { Message, TokenUsage } from './types'
-import { chatCompletion } from './openrouter'
+import { chatCompletion } from './providers'
 import { getConfig } from './config'
+import { executeToolCalls, accumulateUsage, pinnedModelFor } from './tool-loop'
 import { readContext, readSummary, writeSummary, summaryLastModified } from './context'
 import { createTask, loadTasks } from './tasks'
 
@@ -195,74 +196,7 @@ Current tasks:
 ${tasksBrief}`
 }
 
-async function chatCompletionWithTools(
-  apiKey: string,
-  model: string,
-  messages: Message[],
-  signal?: AbortSignal
-) {
-  // Reuse the existing chatCompletion but with a custom tool set — PM has different tools than agents.
-  // Wrap it by patching the request. For simplicity we inline the fetch here.
-  const slugs = model.split(',').map(s => s.trim()).filter(Boolean)
-  const primary = slugs[0]
-  const isOllama = primary?.startsWith('ollama/')
-  const baseUrl = isOllama ? 'http://localhost:11434/v1' : 'https://openrouter.ai/api/v1'
-  const modelName = isOllama ? primary.slice(7) : (slugs.length > 1 ? undefined : primary)
-
-  const body: Record<string, unknown> = {
-    messages: messages.map(m => {
-      if (m.role === 'tool') return { role: 'tool', tool_call_id: m.toolCallId, name: m.name, content: m.content }
-      if (m.role === 'assistant' && m.toolCalls?.length) {
-        return {
-          role: 'assistant',
-          content: m.content ?? '',
-          tool_calls: m.toolCalls.map(tc => ({
-            id: tc.id,
-            type: 'function',
-            function: { name: tc.name, arguments: JSON.stringify(tc.arguments) }
-          }))
-        }
-      }
-      return { role: m.role, content: m.content ?? '' }
-    }),
-    tools: PM_TOOL_SCHEMAS,
-    tool_choice: 'auto'
-  }
-  if (modelName) body.model = modelName
-  else body.models = slugs
-
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (!isOllama) {
-    headers['Authorization'] = `Bearer ${apiKey}`
-    headers['HTTP-Referer'] = 'https://github.com/vibe-ide/vibe'
-    headers['X-Title'] = 'Vibe (PM)'
-  }
-
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-    signal
-  })
-  if (!res.ok) throw new Error(`${isOllama ? 'Ollama' : 'OpenRouter'} ${res.status}: ${await res.text().catch(() => '')}`)
-  const data = await res.json() as {
-    model?: string
-    choices: Array<{ message: { role: 'assistant'; content: string | null; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> } }>
-    usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
-  }
-  const choice = data.choices[0]
-  const toolCalls = choice.message.tool_calls?.map(tc => {
-    let args: Record<string, unknown> = {}
-    try { args = JSON.parse(tc.function.arguments || '{}') } catch { args = { _raw: tc.function.arguments } }
-    return { id: tc.id, name: tc.function.name, arguments: args }
-  })
-  return {
-    message: { role: 'assistant' as const, content: choice.message.content, toolCalls, servedBy: data.model },
-    usage: data.usage
-  }
-}
-
-async function runPmLoop(workspace: string, apiKey: string, model: string, kickoff: string): Promise<void> {
+async function runPmLoop(workspace: string, model: string, kickoff: string): Promise<void> {
   const cfg = getConfig()
   const projectContext = await readContext(workspace).catch(() => '(no project context)')
   const currentSummary = await readSummary(workspace).catch(() => '(no summary yet)')
@@ -290,39 +224,33 @@ async function runPmLoop(workspace: string, apiKey: string, model: string, kicko
 
   while (steps < MAX) {
     steps++
-    const { message, usage } = await chatCompletionWithTools(apiKey, state.pinnedModel ?? model, messages)
+    const { message, usage } = await chatCompletion({
+      keys: { openrouter: cfg.openrouterApiKey, anthropic: cfg.anthropicApiKey },
+      model: state.pinnedModel ?? model,
+      messages,
+      tools: PM_TOOL_SCHEMAS as unknown as Array<Record<string, unknown>>
+    })
     messages.push(message)
     state.messages.push(message)
     emit('message', message)
 
-    if (!state.pinnedModel && message.servedBy) state.pinnedModel = message.servedBy
-    if (usage) {
-      const prev = state.usage ?? { prompt: 0, completion: 0, total: 0 }
-      state.usage = {
-        prompt: prev.prompt + (usage.prompt_tokens ?? 0),
-        completion: prev.completion + (usage.completion_tokens ?? 0),
-        total: prev.total + (usage.total_tokens ?? 0)
-      }
+    state.pinnedModel = pinnedModelFor(state.pinnedModel, model, message.servedBy)
+    const nextUsage = accumulateUsage(state.usage, usage)
+    if (nextUsage !== state.usage) {
+      state.usage = nextUsage
       emit('usage', state.usage)
     }
 
     if (!message.toolCalls || message.toolCalls.length === 0) break
 
-    let done = false
-    for (const call of message.toolCalls) {
-      let result = ''
-      try {
-        result = await executePmTool(workspace, call.name, call.arguments)
-      } catch (e) {
-        result = `[error] ${(e as Error).message}`
-      }
-      const toolMsg: Message = { role: 'tool', content: result, toolCallId: call.id, name: call.name }
-      messages.push(toolMsg)
-      state.messages.push(toolMsg)
-      emit('message', toolMsg)
-      if (call.name === 'finish') done = true
-    }
-    if (done) break
+    const result = await executeToolCalls({
+      toolCalls: message.toolCalls,
+      execute: (name, args) => executePmTool(workspace, name, args)
+    })
+    messages.push(...result.messages)
+    state.messages.push(...result.messages)
+    result.messages.forEach(m => emit('message', m))
+    if (result.calledFinish) break
   }
 }
 
@@ -330,7 +258,9 @@ export async function runPmAgent(trigger: 'merge' | 'manual' | 'chat', userInput
   if (state.status === 'running') throw new Error('PM agent already running')
   const cfg = getConfig()
   if (!cfg.workspacePath) throw new Error('No workspace')
-  if (!cfg.openrouterApiKey && !cfg.model.startsWith('ollama/')) throw new Error('No API key or Ollama model')
+  if (!cfg.openrouterApiKey && !cfg.anthropicApiKey && !cfg.model.startsWith('ollama/')) {
+    throw new Error('No API key or Ollama model')
+  }
 
   state.status = 'running'
   state.lastTrigger = trigger
@@ -344,7 +274,7 @@ export async function runPmAgent(trigger: 'merge' | 'manual' | 'chat', userInput
     : (userInput ?? 'Continue.')
 
   try {
-    await runPmLoop(cfg.workspacePath, cfg.openrouterApiKey ?? '', cfg.model, kickoff)
+    await runPmLoop(cfg.workspacePath, cfg.model, kickoff)
     state.status = 'idle'
     state.lastRun = new Date().toISOString()
     emit('status', 'idle')

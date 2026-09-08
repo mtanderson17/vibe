@@ -9,7 +9,7 @@ import { runPmAgent, getPmState, clearPmChat, bindPmSender } from './pmagent'
 import { readSummary, writeSummary, summaryLastModified } from './context'
 import { readContext, writeContext } from './context'
 import { bindSender, startAgent, continueAgent, killAgent, listAgents, ensureAgent, getAgent, emit, hydrateAgentsFromWorkspace, spawnAgent, closeAgent } from './agent'
-import { deleteAgentFile } from './persistence'
+import { deleteAgentFile, saveAgent } from './persistence'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -157,12 +157,24 @@ function registerIpc(): void {
   ipcMain.handle('agents:close', async (_e, id: string) => {
     const cfg = getConfig()
     const agent = getAgent(id)
-    if (agent?.branch && cfg.workspacePath && agent.worktreePath) {
-      await removeWorktree(cfg.workspacePath, agent.worktreePath).catch(() => {})
-      await deleteBranch(cfg.workspacePath, agent.branch).catch(() => {})
-    }
+    const branch = agent?.branch
+    const worktreePath = agent?.worktreePath
+
+    // Immediate work: kill any running loop + drop in-memory state + delete persistence file.
+    // These are all fast (memory + one file unlink).
     closeAgent(id)
-    if (cfg.workspacePath) await deleteAgentFile(cfg.workspacePath, id)
+    if (cfg.workspacePath) {
+      await deleteAgentFile(cfg.workspacePath, id).catch(() => {})
+    }
+
+    // Background work: git worktree removal + branch delete are slow on Windows (~1-3s each).
+    // Fire and forget — the UI has already updated optimistically.
+    if (branch && cfg.workspacePath && worktreePath) {
+      Promise.resolve().then(async () => {
+        await removeWorktree(cfg.workspacePath!, worktreePath).catch(err => console.error('[vibe] worktree cleanup failed', err))
+        await deleteBranch(cfg.workspacePath!, branch).catch(err => console.error('[vibe] branch delete failed', err))
+      })
+    }
     return { ok: true }
   })
 
@@ -203,11 +215,14 @@ function registerIpc(): void {
     if (!cfg.workspacePath || !agent?.branch) throw new Error('Nothing to merge')
     const result = await mergeBranch(cfg.workspacePath, agent.branch)
     if (result.ok) {
-      agent.status = 'merged'
       if (agent.worktreePath) await removeWorktree(cfg.workspacePath, agent.worktreePath)
       if (agent.branch) await deleteBranch(cfg.workspacePath, agent.branch)
+      // Clear dead refs BEFORE persisting so a restart doesn't hydrate stale state.
+      agent.status = 'merged'
+      agent.branch = null
+      agent.worktreePath = null
+      await saveAgent(cfg.workspacePath, agent).catch(err => console.error('[vibe] persist merged failed', err))
       emit({ agentId: id, type: 'status', data: 'merged' })
-      // Fire PM agent post-merge (non-blocking)
       runPmAgent('merge').catch(err => console.error('[vibe] pm-agent post-merge failed', err))
     }
     return result
@@ -241,9 +256,12 @@ function registerIpc(): void {
     if (!cfg.workspacePath || !agent?.branch) throw new Error('Cannot accept: missing workspace or branch')
     await applyResolution(cfg.workspacePath, files)
     await commitResolution(cfg.workspacePath, agent.branch)
-    agent.status = 'merged'
     if (agent.worktreePath) await removeWorktree(cfg.workspacePath, agent.worktreePath)
     if (agent.branch) await deleteBranch(cfg.workspacePath, agent.branch)
+    agent.status = 'merged'
+    agent.branch = null
+    agent.worktreePath = null
+    await saveAgent(cfg.workspacePath, agent).catch(err => console.error('[vibe] persist merged failed', err))
     emit({ agentId: id, type: 'status', data: 'merged' })
     return { ok: true }
   })

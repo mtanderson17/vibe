@@ -5,6 +5,7 @@ const store = new Store<Config>({
   defaults: {
     workspacePath: null,
     openrouterApiKey: null,
+    anthropicApiKey: null,
     model: 'openrouter/free,minimax/minimax-m3:free',
     maxSteps: 25,
     agentCount: 4
@@ -15,6 +16,7 @@ export function getConfig(): Config {
   return {
     workspacePath: store.get('workspacePath'),
     openrouterApiKey: store.get('openrouterApiKey'),
+    anthropicApiKey: store.get('anthropicApiKey') ?? null,
     model: store.get('model'),
     maxSteps: store.get('maxSteps'),
     agentCount: store.get('agentCount') ?? 4

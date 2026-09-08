@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { saveAgent, loadAgents, deleteAgentFile } from '../electron/main/persistence'
+import { saveAgent, loadAgents, deleteAgentFile, sanitizeHydratedAgent } from '../electron/main/persistence'
 import type { AgentState } from '../electron/main/types'
 
 function scratch() {
@@ -88,5 +88,60 @@ test('deleteAgentFile is idempotent (does not throw)', async () => {
   try {
     await deleteAgentFile(dir, 'never-existed')
     // No assertion — just make sure it doesn't throw
+  } finally { cleanup() }
+})
+
+// --- sanitizeHydratedAgent (defends against restart bugs) ---
+
+test('sanitizeHydratedAgent: running → awaiting_input', () => {
+  const cleaned = sanitizeHydratedAgent(makeAgent({ status: 'running' }))
+  assert.equal(cleaned.status, 'awaiting_input')
+})
+
+test('sanitizeHydratedAgent: awaiting_merge with dead worktree ref → merged + refs cleared', () => {
+  const cleaned = sanitizeHydratedAgent(makeAgent({
+    status: 'awaiting_merge',
+    worktreePath: '/nonexistent/path/that/definitely/does/not/exist',
+    branch: 'vibe/agent-1/dead-branch'
+  }))
+  assert.equal(cleaned.status, 'merged')
+  assert.equal(cleaned.worktreePath, null)
+  assert.equal(cleaned.branch, null)
+})
+
+test('sanitizeHydratedAgent: awaiting_merge with real worktree stays awaiting_merge', () => {
+  // Use the tmp dir itself (guaranteed to exist)
+  const cleaned = sanitizeHydratedAgent(makeAgent({
+    status: 'awaiting_merge',
+    worktreePath: process.cwd(),  // definitely exists
+    branch: 'vibe/agent-1/real'
+  }))
+  assert.equal(cleaned.status, 'awaiting_merge')
+  assert.equal(cleaned.branch, 'vibe/agent-1/real')
+})
+
+test('sanitizeHydratedAgent: idle with no refs is untouched', () => {
+  const cleaned = sanitizeHydratedAgent(makeAgent({ status: 'idle' }))
+  assert.equal(cleaned.status, 'idle')
+  assert.equal(cleaned.worktreePath, null)
+  assert.equal(cleaned.branch, null)
+})
+
+test('saveAgent + loadAgents: merged-with-cleared-refs roundtrip preserves state', async () => {
+  const { dir, cleanup } = scratch()
+  try {
+    await saveAgent(dir, makeAgent({
+      id: 'agent-1',
+      status: 'merged',
+      branch: null,
+      worktreePath: null,
+      task: 'add feature',
+      messages: [{ role: 'user', content: 'go' }]
+    }))
+    const [loaded] = await loadAgents(dir)
+    assert.equal(loaded.status, 'merged')
+    assert.equal(loaded.branch, null)
+    assert.equal(loaded.worktreePath, null)
+    assert.equal(loaded.task, 'add feature')
   } finally { cleanup() }
 })

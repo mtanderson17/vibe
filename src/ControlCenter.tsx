@@ -29,8 +29,6 @@ function lastAssistantContent(messages: Message[]): string {
 }
 
 export default function ControlCenter({ agentIds, onFocus, onSpawn, onClose, atCap, maxAgents }: Props) {
-  const agents = useAgents(s => s.agents)
-
   return (
     <div className="control-center">
       <div className="control-header">
@@ -43,57 +41,9 @@ export default function ControlCenter({ agentIds, onFocus, onSpawn, onClose, atC
       </div>
 
       <div className="control-grid">
-        {agentIds.map(id => {
-          const a = agents[id]
-          const status = a?.status ?? 'idle'
-          const preview = a ? lastAssistantContent(a.messages) : ''
-          return (
-            <div key={id} className={`control-tile status-${status}`} onClick={() => onFocus(id)}>
-              <div className="control-tile-head">
-                <span className={`status-dot status-${status}`} />
-                <strong>{id}</strong>
-                <span style={{ opacity: 0.6 }}>· {STATUS_LABEL[status]}</span>
-                <div style={{ flex: 1 }} />
-                {a?.step && a?.maxSteps && (
-                  <span style={{ fontSize: 10, opacity: 0.6 }}>step {a.step}/{a.maxSteps}</span>
-                )}
-                {status === 'running' && (
-                  <button
-                    className="danger"
-                    style={{ fontSize: 10, padding: '2px 6px' }}
-                    onClick={(e) => { e.stopPropagation(); window.vibe.agents.kill(id) }}
-                    title="Stop this agent"
-                  >
-                    Stop
-                  </button>
-                )}
-                <button
-                  className="tile-close"
-                  onClick={(e) => { e.stopPropagation(); onClose(id) }}
-                  title="Close agent (removes worktree + branch)"
-                >×</button>
-              </div>
-              {a?.task && (
-                <div className="control-tile-task">{a.task}</div>
-              )}
-              {a?.branch && (
-                <div className="control-tile-branch">{a.branch}</div>
-              )}
-              {preview && (
-                <div className="control-tile-preview">{preview}</div>
-              )}
-              {!a?.task && !preview && (
-                <div className="control-tile-empty">No task yet · click to give one</div>
-              )}
-              {a?.usage && (
-                <div className="control-tile-footer">
-                  {a.usage.total.toLocaleString()} tokens
-                  {a.pinnedModel && <> · {a.pinnedModel.split('/').pop()}</>}
-                </div>
-              )}
-            </div>
-          )
-        })}
+        {agentIds.map(id => (
+          <AgentTile key={id} agentId={id} onFocus={onFocus} onClose={onClose} />
+        ))}
 
         {!atCap ? (
           <div className="control-tile control-tile-add" onClick={onSpawn}>
@@ -114,6 +64,59 @@ export default function ControlCenter({ agentIds, onFocus, onSpawn, onClose, atC
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// Extracted so each tile subscribes only to its own agent — a stream_delta on
+// agent-3 won't cause every other tile to re-render.
+function AgentTile({ agentId, onFocus, onClose }: {
+  agentId: string
+  onFocus: (id: string) => void
+  onClose: (id: string) => void
+}) {
+  const a = useAgents(s => s.agents[agentId])
+  const status = a?.status ?? 'idle'
+  const preview = a ? lastAssistantContent(a.messages) : ''
+
+  return (
+    <div className={`control-tile status-${status}`} onClick={() => onFocus(agentId)}>
+      <div className="control-tile-head">
+        <span className={`status-dot status-${status}`} />
+        <strong>{agentId}</strong>
+        <span style={{ opacity: 0.6 }}>· {STATUS_LABEL[status]}</span>
+        <div style={{ flex: 1 }} />
+        {a?.step && a?.maxSteps && (
+          <span style={{ fontSize: 10, opacity: 0.6 }}>step {a.step}/{a.maxSteps}</span>
+        )}
+        {status === 'running' && (
+          <button
+            className="danger"
+            style={{ fontSize: 10, padding: '2px 6px' }}
+            onClick={(e) => { e.stopPropagation(); window.vibe.agents.kill(agentId) }}
+            title="Stop this agent"
+          >
+            Stop
+          </button>
+        )}
+        <button
+          className="tile-close"
+          onClick={(e) => { e.stopPropagation(); onClose(agentId) }}
+          title="Close agent (removes worktree + branch)"
+        >×</button>
+      </div>
+      {a?.task && <div className="control-tile-task">{a.task}</div>}
+      {a?.branch && <div className="control-tile-branch">{a.branch}</div>}
+      {preview && <div className="control-tile-preview">{preview}</div>}
+      {!a?.task && !preview && (
+        <div className="control-tile-empty">No task yet · click to give one</div>
+      )}
+      {a?.usage && (
+        <div className="control-tile-footer">
+          {a.usage.total.toLocaleString()} tokens
+          {a.pinnedModel && <> · {a.pinnedModel.split('/').pop()}</>}
+        </div>
+      )}
     </div>
   )
 }

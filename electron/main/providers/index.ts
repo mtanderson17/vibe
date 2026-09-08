@@ -1,0 +1,6 @@
+export { chatCompletion } from './chain'
+export { shortCompletion } from './short'
+export { completion, providerFor, ProviderError } from './adapter'
+export type { CompletionResult, Usage, ProviderInfo } from './types'
+export type { ChainOptions } from './chain'
+export type { ProviderKeys } from './adapter'

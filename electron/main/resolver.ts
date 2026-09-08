@@ -2,8 +2,9 @@ import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { chatCompletion } from './openrouter'
+import { chatCompletion } from './providers'
 import type { Message } from './types'
+import { getConfig } from './config'
 
 const exec = promisify(execFile)
 
@@ -86,7 +87,12 @@ ${original}
     ]
 
     try {
-      const { message } = await chatCompletion(apiKey, model, messages)
+      const cfg = getConfig()
+      const { message } = await chatCompletion({
+        keys: { openrouter: apiKey, anthropic: cfg.anthropicApiKey },
+        model,
+        messages
+      })
       const resolved = stripFences((message.content ?? '').trim())
       if (message.servedBy) servedBy = message.servedBy
       files.push({ path: rel, originalConflict: original, resolved })

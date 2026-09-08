@@ -10,6 +10,7 @@ export default function ContextView() {
   const [summaryModified, setSummaryModified] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [pmStatus, setPmStatus] = useState<'idle' | 'running' | 'error'>('idle')
+  const [pmError, setPmError] = useState<string | null>(null)
 
   const refreshSummary = useCallback(async () => {
     const [content, modified] = await Promise.all([
@@ -30,7 +31,11 @@ export default function ContextView() {
     const off = window.vibe.onPmEvent(evt => {
       if (evt.type === 'status') {
         setPmStatus(evt.data as 'idle' | 'running' | 'error')
-        if (evt.data === 'idle') refreshSummary()
+        if (evt.data === 'idle') { refreshSummary(); setPmError(null) }
+        if (evt.data === 'running') setPmError(null)
+      }
+      if (evt.type === 'error') {
+        setPmError(evt.data as string)
       }
     })
     return off
@@ -70,7 +75,7 @@ export default function ContextView() {
         )}
         {tab === 'summary' && (
           <button className="primary" onClick={regenerate} disabled={pmStatus === 'running'}>
-            {pmStatus === 'running' ? 'Regenerating…' : 'Regenerate now'}
+            {pmStatus === 'running' ? 'Regenerating…' : pmStatus === 'error' ? 'Retry' : 'Regenerate now'}
           </button>
         )}
       </div>
@@ -100,6 +105,14 @@ export default function ContextView() {
               <span style={{ opacity: 0.7 }}>Last updated: {new Date(summaryModified).toLocaleString()}</span>
             )}
           </div>
+          {pmError && (
+            <div className="merge-banner conflict" style={{ margin: 0 }}>
+              <div className="msg-text">
+                <div style={{ fontWeight: 600 }}>PM agent error</div>
+                <div style={{ marginTop: 4, fontSize: 12, fontFamily: 'monospace' }}>{pmError}</div>
+              </div>
+            </div>
+          )}
           <textarea value={summaryContent} readOnly style={{ background: 'var(--bg)', opacity: 0.85 }} />
         </>
       )}

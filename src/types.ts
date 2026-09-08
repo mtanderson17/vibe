@@ -40,6 +40,7 @@ export interface AgentState {
 export interface Config {
   workspacePath: string | null
   openrouterApiKey: string | null
+  anthropicApiKey: string | null
   model: string
   maxSteps: number
   agentCount: number

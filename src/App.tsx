@@ -15,7 +15,7 @@ export default function App() {
   const [config, setConfig] = useState<Config | null>(null)
   const [sidebarView, setSidebarView] = useState<SidebarView>('control')
   const [focusedAgent, setFocusedAgent] = useState<string | null>(null)
-  const agents = useAgents(s => s.agents)
+  const agentSummaries = useAgents(s => s.agents)
   const applyEvent = useAgents(s => s.applyEvent)
   const hydrate = useAgents(s => s.hydrate)
   const addAgent = useAgents(s => s.addAgent)
@@ -37,12 +37,12 @@ export default function App() {
   }, [applyEvent])
 
   const agentIds = useMemo(() => {
-    return Object.keys(agents).sort((a, b) => {
+    return Object.keys(agentSummaries).sort((a, b) => {
       const na = parseInt(a.replace(/\D/g, '')) || 0
       const nb = parseInt(b.replace(/\D/g, '')) || 0
       return na - nb
     })
-  }, [agents])
+  }, [agentSummaries])
 
   const atAgentCap = agentIds.length >= (config?.agentCount ?? 4)
 
@@ -55,19 +55,24 @@ export default function App() {
   }
 
   async function handleClose(id: string) {
-    const a = agents[id]
-    // Confirm if the agent has real state
-    if (a && (a.messages.length > 0 || a.status !== 'idle')) {
+    const a = agentSummaries[id]
+    if (a && a.status !== 'idle') {
       if (!confirm(`Close ${id}? Any in-flight work, worktree, and branch will be cleaned up.`)) return
     }
-    await window.vibe.agents.close(id)
+    // Optimistic UI: remove from store immediately so the tab disappears now.
+    // Worktree/branch cleanup happens in the background (git ops on Windows are ~1-3s).
     removeAgent(id)
     if (focusedAgent === id) setFocusedAgent(null)
+    window.vibe.agents.close(id).catch(err => console.error('[vibe] close failed', err))
   }
 
   if (!config) return null
 
-  const missingCreds = !config.workspacePath || (!config.openrouterApiKey && !config.model.startsWith('ollama/'))
+  const missingCreds = !config.workspacePath || (
+    !config.openrouterApiKey &&
+    !config.anthropicApiKey &&
+    !config.model.startsWith('ollama/')
+  )
   if (missingCreds) {
     return <Setup config={config} onSaved={setConfig} />
   }
@@ -107,7 +112,7 @@ export default function App() {
                   className={`agent-tab ${focusedAgent === id ? 'active' : ''}`}
                   onClick={() => setFocusedAgent(id)}
                 >
-                  <span className={`status-dot status-${agents[id]?.status ?? 'idle'}`} />
+                  <span className={`status-dot status-${agentSummaries[id]?.status ?? 'idle'}`} />
                   <span className="agent-tab-label">{id}</span>
                   <button
                     className="agent-tab-close"
@@ -132,7 +137,7 @@ export default function App() {
               )}
             </div>
             <div style={{ flex: 1, overflow: 'hidden' }}>
-              {focusedAgent && agents[focusedAgent]
+              {focusedAgent && agentSummaries[focusedAgent]
                 ? <AgentPanel agentId={focusedAgent} />
                 : <ControlCenter
                     agentIds={agentIds}

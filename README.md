@@ -126,8 +126,33 @@ your-project/
 npm run dev         # Electron dev with hot reload
 npm run build       # Production build
 npm run typecheck   # tsc across main + renderer
-npm test            # Node's built-in test runner via tsx
+npm test            # Node's built-in test runner via tsx (69 tests as of v0.3)
 ```
+
+## Known issues / rough edges
+
+Being upfront about the state of the app while it's still stabilizing:
+
+- **Cost tracking is per-task, not persistent.** Closing an agent or starting a new
+  task resets its token counter. There's no session/daily/all-time total yet. A
+  proper persistent cost ledger is on the backlog.
+- **Small local models produce small-model results.** Free-tier and 3B Ollama models
+  often mis-format tool calls, hallucinate URLs into binary files, or ignore
+  AGENTS.md guidance. This is a model-quality floor, not a Vibe bug. BYOK Anthropic
+  or a paid OpenRouter tier fixes it.
+- **Sibling context is a snapshot at task start**, not refreshed mid-task. If
+  another agent starts or finishes while you're mid-conversation, the current
+  agent won't know until you start a new task.
+- **PM agent runs on the same global model as coding agents.** No dedicated
+  model-per-role yet (backlog: per-agent model override).
+- **Streaming re-renders more than they need to.** ControlCenter tiles are
+  per-agent subscriptions (efficient), but the top-level App still subscribes to
+  the whole agents map. Noticeable but not blocking. Fix planned.
+- **UI polish is uneven.** Some screens (Control Center, Cost) are tight; others
+  (Setup, Merge conflict banner) could use another pass.
+- **No sandboxing on `run_bash`.** Agents can install packages globally,
+  read/modify files outside the worktree via shell, etc. Use a scratch workspace
+  when testing. Container-per-agent isolation is planned.
 
 ## Security
 
@@ -140,6 +165,8 @@ npm test            # Node's built-in test runner via tsx
 ## Roadmap
 
 **Near term**
+- Persistent cost ledger (survives close/spawn/restart, running totals, daily breakdown)
+- Per-agent model override (pick a different model per chat, not just globally)
 - Container-per-agent isolation for `run_bash` sandboxing
 - Encrypted key storage via Electron's `safeStorage`
 - Ollama model badges in setup (mark which support tool calling)

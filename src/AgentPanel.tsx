@@ -1,12 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAgents } from './stores/agents'
-import type { Message } from './types'
+import MessageView from './components/MessageView'
+import FriendlyError from './components/FriendlyError'
+import ResolvedFileView, { type ResolvedFile } from './components/ResolvedFileView'
 
 interface Props {
   agentId: string
 }
-
-interface ResolvedFile { path: string; originalConflict: string; resolved: string }
 
 export default function AgentPanel({ agentId }: Props) {
   const storeAgent = useAgents(s => s.agents[agentId])
@@ -232,151 +232,3 @@ export default function AgentPanel({ agentId }: Props) {
   )
 }
 
-function FriendlyError({ raw }: { raw: string }) {
-  // Free-tier daily cap
-  if (raw.includes('free-models-per-day')) {
-    const resetMatch = raw.match(/X-RateLimit-Reset"[:\s]+"(\d+)"/)
-    const resetTime = resetMatch ? new Date(parseInt(resetMatch[1])).toLocaleString() : 'daily reset'
-    return (
-      <div>
-        <div style={{ fontWeight: 600 }}>OpenRouter free-tier daily limit reached (50 requests/day)</div>
-        <div style={{ marginTop: 4, opacity: 0.85 }}>
-          Reset: {resetTime}. Options:
-        </div>
-        <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
-          <li>Wait for the daily reset</li>
-          <li>Add $10 credit at openrouter.ai to unlock 1000 free requests/day</li>
-          <li>Switch to a local Ollama model in Settings (no daily cap, no cost)</li>
-        </ul>
-      </div>
-    )
-  }
-  if (raw.includes('paid version is available')) {
-    return (
-      <div>
-        <div style={{ fontWeight: 600 }}>This model no longer has a free variant</div>
-        <div style={{ marginTop: 4, opacity: 0.85 }}>
-          OpenRouter's free-tier catalog shifted. Go to Settings → Test free models to pick a currently-live one.
-        </div>
-      </div>
-    )
-  }
-  if (raw.includes('No models provided')) {
-    return (
-      <div>
-        <div style={{ fontWeight: 600 }}>Router couldn't find a free model right now</div>
-        <div style={{ marginTop: 4, opacity: 0.85 }}>
-          Go to Settings → Test free models to see current availability, or add a fallback.
-        </div>
-      </div>
-    )
-  }
-  if (raw.startsWith('Ollama') && (raw.includes('CUDA') || raw.includes('llama-server process has terminated'))) {
-    return (
-      <div>
-        <div style={{ fontWeight: 600 }}>Ollama crashed running this model</div>
-        <div style={{ marginTop: 4, opacity: 0.85 }}>
-          This is usually a GPU driver / VRAM mismatch. Options:
-        </div>
-        <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
-          <li>Try a smaller model (e.g. <code>llama3.2:3b</code> or <code>qwen2.5-coder:7b</code>)</li>
-          <li>Force CPU-only mode: set env var <code>OLLAMA_LLM_LIBRARY=cpu</code> and restart Ollama</li>
-          <li>Update your NVIDIA driver + CUDA toolkit</li>
-          <li>Switch to an OpenRouter fallback in Settings while you diagnose</li>
-        </ul>
-      </div>
-    )
-  }
-  if (raw.startsWith('Ollama') && raw.includes('model') && raw.includes('not found')) {
-    return (
-      <div>
-        <div style={{ fontWeight: 600 }}>Ollama model not pulled locally</div>
-        <div style={{ marginTop: 4, opacity: 0.85 }}>
-          Run <code>ollama pull &lt;model-name&gt;</code> in a terminal, then retry.
-        </div>
-      </div>
-    )
-  }
-  if (raw.startsWith('Ollama') && raw.includes('does not support tools')) {
-    return (
-      <div>
-        <div style={{ fontWeight: 600 }}>This Ollama model doesn't support tool calling</div>
-        <div style={{ marginTop: 4, opacity: 0.85 }}>
-          Vibe agents need tool-calling. Try a model that supports it:
-          <code style={{ marginLeft: 4 }}>llama3.1</code>, <code>llama3.2</code>, <code>qwen2.5-coder</code>, or <code>mistral-nemo</code>.
-        </div>
-      </div>
-    )
-  }
-  return <>Error: {raw}</>
-}
-
-function ResolvedFileView({ file }: { file: ResolvedFile }) {
-  const [expanded, setExpanded] = useState(true)
-  if (!file.resolved) {
-    return (
-      <div className="resolved-file unresolvable">
-        <div className="resolved-file-header">
-          ⨯ {file.path} <span style={{ opacity: 0.7 }}>(binary or unresolvable — manual review required)</span>
-        </div>
-      </div>
-    )
-  }
-  return (
-    <div className="resolved-file">
-      <div className="resolved-file-header" onClick={() => setExpanded(!expanded)}>
-        <span>{expanded ? '▼' : '▶'} ✓ {file.path}</span>
-      </div>
-      {expanded && (
-        <div className="resolved-file-body">
-          <div className="resolved-col">
-            <div className="resolved-col-label">Original (with conflict markers)</div>
-            <pre className="resolved-code conflict-markers">{annotateConflict(file.originalConflict)}</pre>
-          </div>
-          <div className="resolved-col">
-            <div className="resolved-col-label">Resolved</div>
-            <pre className="resolved-code resolved">{file.resolved}</pre>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function annotateConflict(text: string): React.ReactNode {
-  return text.split('\n').map((line, i) => {
-    let cls = ''
-    if (line.startsWith('<<<<<<<')) cls = 'conflict-ours-marker'
-    else if (line.startsWith('=======')) cls = 'conflict-sep-marker'
-    else if (line.startsWith('>>>>>>>')) cls = 'conflict-theirs-marker'
-    return <div key={i} className={cls}>{line || ' '}</div>
-  })
-}
-
-function MessageView({ message }: { message: Message }) {
-  const cls = `msg ${message.role}`
-  const hasToolCalls = message.role === 'assistant' && message.toolCalls && message.toolCalls.length > 0
-
-  return (
-    <div className={cls}>
-      <div className="role">
-        {message.role === 'tool' ? `tool: ${message.name}` : message.role}
-        {message.servedBy && (
-          <span style={{ marginLeft: 8, opacity: 0.7, textTransform: 'none', letterSpacing: 0 }}>
-            · served by {message.servedBy}
-          </span>
-        )}
-      </div>
-      {message.content && <div>{message.content}</div>}
-      {hasToolCalls && message.toolCalls!.map(tc => (
-        <div key={tc.id} className="toolcall">
-          → {tc.name}({Object.keys(tc.arguments).map(k => {
-            const v = tc.arguments[k]
-            const s = typeof v === 'string' ? v : JSON.stringify(v)
-            return `${k}: ${s.length > 80 ? s.slice(0, 80) + '…' : s}`
-          }).join(', ')})
-        </div>
-      ))}
-    </div>
-  )
-}

@@ -6,11 +6,22 @@ interface Props { agentIds: string[] }
 
 type Pricing = Record<string, { prompt: number; completion: number }>
 
+// Public Anthropic pricing as of late 2025, per-token USD. Used as a fallback when
+// the OpenRouter /models table doesn't include the exact anthropic/* slug that a
+// BYOK-Anthropic user is running against. Update as Anthropic changes their pricing.
+const ANTHROPIC_FALLBACK: Pricing = {
+  'anthropic/claude-opus-4-7':      { prompt: 0.000015, completion: 0.000075 },
+  'anthropic/claude-opus-4-6':      { prompt: 0.000015, completion: 0.000075 },
+  'anthropic/claude-sonnet-4-6':    { prompt: 0.000003, completion: 0.000015 },
+  'anthropic/claude-sonnet-4-5':    { prompt: 0.000003, completion: 0.000015 },
+  'anthropic/claude-haiku-4-5':     { prompt: 0.000001, completion: 0.000005 },
+  'anthropic/claude-haiku-4-5-20251001': { prompt: 0.000001, completion: 0.000005 }
+}
+
 function costOf(usage: AgentState['usage'], model: string | undefined, pricing: Pricing): number {
   if (!usage || !model) return 0
-  const p = pricing[model]
+  const p = pricing[model] ?? ANTHROPIC_FALLBACK[model]
   if (!p) return 0
-  // OpenRouter pricing is per-token in USD
   return usage.prompt * p.prompt + usage.completion * p.completion
 }
 
