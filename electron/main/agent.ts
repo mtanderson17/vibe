@@ -13,6 +13,10 @@ import { getPricing } from './pricing'
 
 const agents = new Map<string, AgentState>()
 const agentAborts = new Map<string, AbortController>()
+// Ids currently being torn down (git worktree remove / branch delete in progress).
+// Reserved from spawn so we don't hand the same id to a new agent while the
+// old agent's cleanup is still running against its worktree directory.
+const closingIds = new Set<string>()
 let sender: WebContents | null = null
 
 export function bindSender(webContents: WebContents): void {
@@ -56,16 +60,19 @@ export async function hydrateAgentsFromWorkspace(workspacePath: string): Promise
 }
 
 export function spawnAgent(): AgentState {
-  // Find the next available agent-N id
-  const existing = Array.from(agents.keys())
+  // Find the next available agent-N id, skipping any ids that are still tearing down.
+  const existing = new Set([...agents.keys(), ...closingIds])
   let n = 1
-  while (existing.includes(`agent-${n}`)) n++
+  while (existing.has(`agent-${n}`)) n++
   const id = `agent-${n}`
   const a: AgentState = { id, status: 'idle', task: null, branch: null, worktreePath: null, messages: [] }
   agents.set(id, a)
   persist(a)
   return a
 }
+
+export function markClosing(id: string): void { closingIds.add(id) }
+export function markClosed(id: string): void { closingIds.delete(id) }
 
 // Ensure the agent exists in memory even if the user has never started it —
 // otherwise renames from the tab/tile silently do nothing when Vibe first opens.

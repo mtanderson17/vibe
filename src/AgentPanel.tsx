@@ -290,6 +290,28 @@ export default function AgentPanel({ agentId }: Props) {
           )
         }
 
+        // If the agent just called ask_human (free-form question), surface it prominently
+        // so the user knows they need to reply — the tool call display alone truncates
+        // long questions.
+        const pendingQuestion = isFollowUp ? findPendingQuestion(agent.messages) : null
+        if (pendingQuestion) {
+          return (
+            <div className="composer choice-composer">
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, color: 'var(--fg-dim)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
+                  Agent asks:
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--fg)', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>
+                  {pendingQuestion}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--fg-dim)', marginTop: 6 }}>
+                  Type your reply below.
+                </div>
+              </div>
+            </div>
+          )
+        }
+
         // If the agent just called ask_human_choice, show clickable options instead
         // of the free-form composer. Click sends the chosen option as the continue input.
         const pendingChoice = isFollowUp ? findPendingChoice(agent.messages) : null
@@ -444,6 +466,22 @@ function ModelOverrideEditor({ agentId, current, disabled }: { agentId: string; 
       </div>
     </div>
   )
+}
+
+// Find an unanswered ask_human call in the tail of messages. Walks backwards; if
+// we hit a user message before finding the tool call at the end, no question pending.
+function findPendingQuestion(messages: import('./types').Message[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (m.role === 'user') return null
+    if (m.role === 'assistant' && m.toolCalls) {
+      const q = m.toolCalls.find(tc => tc.name === 'ask_human')
+      if (q) {
+        return String((q.arguments as { question?: unknown }).question ?? '')
+      }
+    }
+  }
+  return null
 }
 
 // Find an unanswered ask_human_choice call in the tail of messages.

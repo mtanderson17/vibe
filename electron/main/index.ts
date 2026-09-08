@@ -35,7 +35,7 @@ import { listProviderModels } from './catalog'
 import { buildAppMenu } from './menu'
 import { readSummary, writeSummary, summaryLastModified } from './context'
 import { readContext, writeContext } from './context'
-import { bindSender, startAgent, continueAgent, killAgent, listAgents, ensureAgent, getAgent, emit, hydrateAgentsFromWorkspace, spawnAgent, closeAgent, setAgentModel, setAgentName } from './agent'
+import { bindSender, startAgent, continueAgent, killAgent, listAgents, ensureAgent, getAgent, emit, hydrateAgentsFromWorkspace, spawnAgent, closeAgent, setAgentModel, setAgentName, markClosing, markClosed } from './agent'
 import { deleteAgentFile, saveAgent } from './persistence'
 
 let mainWindow: BrowserWindow | null = null
@@ -246,11 +246,18 @@ function registerIpc(): void {
     }
 
     // Background work: git worktree removal + branch delete are slow on Windows (~1-3s each).
-    // Fire and forget — the UI has already updated optimistically.
+    // Reserve the id in `closingIds` so spawnAgent doesn't hand it out to a new agent
+    // before cleanup finishes — otherwise the new agent's worktree would collide with
+    // the old one being deleted.
     if (branch && cfg.workspacePath && worktreePath) {
+      markClosing(id)
       Promise.resolve().then(async () => {
-        await removeWorktree(cfg.workspacePath!, worktreePath).catch(err => console.error('[vibe] worktree cleanup failed', err))
-        await deleteBranch(cfg.workspacePath!, branch).catch(err => console.error('[vibe] branch delete failed', err))
+        try {
+          await removeWorktree(cfg.workspacePath!, worktreePath).catch(err => console.error('[vibe] worktree cleanup failed', err))
+          await deleteBranch(cfg.workspacePath!, branch).catch(err => console.error('[vibe] branch delete failed', err))
+        } finally {
+          markClosed(id)
+        }
       })
     }
     return { ok: true }
