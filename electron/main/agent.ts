@@ -67,6 +67,14 @@ export function spawnAgent(): AgentState {
   return a
 }
 
+export function setAgentName(id: string, displayName: string | null): void {
+  const agent = agents.get(id)
+  if (!agent) return
+  agent.displayName = displayName?.trim() || undefined
+  persist(agent)
+  emit({ agentId: id, type: 'status', data: agent.status })
+}
+
 export function setAgentModel(id: string, modelOverride: string | null): void {
   const agent = agents.get(id)
   if (!agent) return

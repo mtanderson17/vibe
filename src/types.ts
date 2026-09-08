@@ -32,6 +32,7 @@ export interface LedgerTotals {
 
 export interface AgentState {
   id: string
+  displayName?: string
   status: AgentStatus
   task: string | null
   branch: string | null
@@ -54,6 +55,7 @@ export interface Config {
   groqApiKey: string | null
   xaiApiKey: string | null
   model: string
+  pmModel: string | null
   maxSteps: number
   agentCount: number
 }
@@ -87,6 +89,7 @@ declare global {
       }
       models: {
         pricing: () => Promise<Record<string, { prompt: number; completion: number }>>
+        listProvider: (provider: 'anthropic' | 'openai' | 'gemini' | 'groq' | 'xai') => Promise<string[]>
       }
       ledger: {
         summary: () => Promise<{
@@ -131,6 +134,7 @@ declare global {
         continue: (id: string, input: string) => Promise<{ ok: boolean }>
         kill: (id: string) => Promise<{ ok: boolean }>
         setModel: (id: string, model: string | null) => Promise<{ ok: boolean }>
+        setName: (id: string, name: string | null) => Promise<{ ok: boolean }>
         checkOverlap: (id: string) => Promise<{ own: string[]; overlaps: Record<string, string[]> }>
         previewDiff: (id: string) => Promise<{
           files: Array<{ path: string; addedLines: number; removedLines: number; diff: string }>

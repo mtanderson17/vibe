@@ -8,6 +8,7 @@ import CostView from './CostView'
 import TasksView from './TasksView'
 import ControlCenter from './ControlCenter'
 import Icon, { type IconName } from './Icon'
+import CommandPalette, { type Command } from './components/CommandPalette'
 
 type SidebarView = 'control' | 'tasks' | 'cost' | 'context' | 'settings'
 
@@ -23,6 +24,7 @@ export default function App() {
   const [sidebarView, setSidebarView] = useState<SidebarView>('control')
   const [focusedAgent, setFocusedAgent] = useState<string | null>(null)
   const [approvals, setApprovals] = useState<ApprovalReq[]>([])
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const agentSummaries = useAgents(s => s.agents)
   const applyEvent = useAgents(s => s.applyEvent)
   const hydrate = useAgents(s => s.hydrate)
@@ -49,6 +51,18 @@ export default function App() {
       setApprovals(prev => [...prev, req])
     })
     return off
+  }, [])
+
+  // Cmd+K / Ctrl+K to open the command palette
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen(prev => !prev)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [])
 
   async function respondApproval(id: string, approved: boolean) {
@@ -85,6 +99,56 @@ export default function App() {
   }, [agentSummaries, focusedAgent, removeAgent])
 
   const handleFocus = useCallback((id: string) => setFocusedAgent(id), [])
+
+  const commands: Command[] = useMemo(() => {
+    const cmds: Command[] = []
+
+    // Views
+    cmds.push({ id: 'view.control', label: 'Go to Control Center', group: 'Navigate', run: () => { setSidebarView('control'); setFocusedAgent(null) } })
+    cmds.push({ id: 'view.tasks',   label: 'Go to Tasks',          group: 'Navigate', run: () => { setSidebarView('tasks'); setFocusedAgent(null) } })
+    cmds.push({ id: 'view.cost',    label: 'Go to Cost',           group: 'Navigate', run: () => { setSidebarView('cost'); setFocusedAgent(null) } })
+    cmds.push({ id: 'view.context', label: 'Go to Context',        group: 'Navigate', run: () => { setSidebarView('context'); setFocusedAgent(null) } })
+    cmds.push({ id: 'view.settings', label: 'Open Settings',       group: 'Navigate', run: () => setSidebarView('settings') })
+
+    // Per-agent commands
+    for (const id of agentIds) {
+      const a = agentSummaries[id]
+      const label = a?.displayName || id
+      cmds.push({
+        id: `focus.${id}`,
+        label: `Focus ${label}`,
+        hint: a?.status ? `Status: ${a.status}` : undefined,
+        group: 'Agents',
+        run: () => { setSidebarView('control'); setFocusedAgent(id) }
+      })
+      if (a?.status === 'running') {
+        cmds.push({
+          id: `kill.${id}`,
+          label: `Stop ${label}`,
+          group: 'Agents',
+          run: () => { window.vibe.agents.kill(id) }
+        })
+      }
+      cmds.push({
+        id: `close.${id}`,
+        label: `Close ${label}`,
+        hint: 'removes worktree + branch',
+        group: 'Agents',
+        run: () => handleClose(id)
+      })
+    }
+
+    // Spawn
+    if (!atAgentCap) {
+      cmds.push({ id: 'spawn', label: 'New agent', group: 'Agents', run: handleSpawn })
+    }
+
+    // PM
+    cmds.push({ id: 'pm.regenerate', label: 'Regenerate project summary (PM)', group: 'PM', run: () => { window.vibe.pm.run('manual') } })
+    cmds.push({ id: 'pm.clear', label: 'Clear PM chat', group: 'PM', run: () => { window.vibe.pm.clear() } })
+
+    return cmds
+  }, [agentIds, agentSummaries, atAgentCap, handleClose, handleSpawn])
 
   if (!config) return null
 
@@ -170,6 +234,8 @@ export default function App() {
         {sidebarView === 'context' && <ContextView />}
       </main>
 
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
+
       {approvals.length > 0 && (
         <div className="approval-overlay">
           <div className="approval-modal">
@@ -202,14 +268,17 @@ export default function App() {
 const AgentTab = memo(function AgentTab({
   id, active, onFocus, onClose
 }: { id: string; active: boolean; onFocus: (id: string) => void; onClose: (id: string) => void }) {
-  const status = useAgents(s => s.agents[id]?.status ?? 'idle')
+  const agent = useAgents(s => s.agents[id])
+  const status = agent?.status ?? 'idle'
+  const label = agent?.displayName || id
   return (
     <div
       className={`agent-tab ${active ? 'active' : ''}`}
       onClick={() => onFocus(id)}
+      title={agent?.displayName ? `${agent.displayName} (${id})` : id}
     >
       <span className={`status-dot status-${status}`} />
-      <span className="agent-tab-label">{id}</span>
+      <span className="agent-tab-label">{label}</span>
       <button
         className="agent-tab-close"
         title="Close agent"

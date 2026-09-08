@@ -92,6 +92,7 @@ export default function Setup({ config, onSaved }: Props) {
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
   const [workspace, setWorkspace] = useState(config.workspacePath ?? '')
   const [model, setModel] = useState(config.model)
+  const [pmModel, setPmModel] = useState(config.pmModel ?? '')
   const [agentCount, setAgentCount] = useState(config.agentCount ?? 4)
   const [maxSteps, setMaxSteps] = useState(config.maxSteps ?? 25)
   const [saving, setSaving] = useState(false)
@@ -117,6 +118,7 @@ export default function Setup({ config, onSaved }: Props) {
       xaiApiKey: keys.xaiApiKey.trim() || null,
       workspacePath: workspace.trim() || null,
       model,
+      pmModel: pmModel.trim() || null,
       agentCount: Math.max(1, Math.min(8, agentCount)),
       maxSteps: Math.max(5, Math.min(200, maxSteps))
     }
@@ -204,7 +206,7 @@ export default function Setup({ config, onSaved }: Props) {
           <div className="settings-section-title">Default model chain</div>
           <div className="settings-section-body">
             <div className="settings-field">
-              <label>Model chain (in order of priority)</label>
+              <label>Coding-agent model chain (in order of priority)</label>
               <ModelChainPicker
                 value={model}
                 onChange={setModel}
@@ -219,7 +221,27 @@ export default function Setup({ config, onSaved }: Props) {
                 }}
               />
               <p className="hint">
-                Applies globally. Individual agents can override in their header. First model is primary; if it fails, Vibe falls through to the next.
+                Applies globally to coding agents. Individual agents can override in their header. First model is primary; if it fails, Vibe falls through to the next.
+              </p>
+            </div>
+
+            <div className="settings-field">
+              <label>PM-agent model chain (optional — uses coding chain if empty)</label>
+              <ModelChainPicker
+                value={pmModel}
+                onChange={setPmModel}
+                config={{
+                  ...config,
+                  openrouterApiKey: keys.openrouterApiKey || null,
+                  anthropicApiKey: keys.anthropicApiKey || null,
+                  openaiApiKey: keys.openaiApiKey || null,
+                  geminiApiKey: keys.geminiApiKey || null,
+                  groqApiKey: keys.groqApiKey || null,
+                  xaiApiKey: keys.xaiApiKey || null
+                }}
+              />
+              <p className="hint">
+                PM agent maintains the project summary and manages tasks — a cheaper/faster model is usually a good fit here.
               </p>
             </div>
           </div>

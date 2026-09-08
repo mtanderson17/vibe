@@ -10,7 +10,9 @@ const api = {
     ollama: () => ipcRenderer.invoke('probe:ollama')
   },
   models: {
-    pricing: () => ipcRenderer.invoke('models:pricing')
+    pricing: () => ipcRenderer.invoke('models:pricing'),
+    listProvider: (provider: 'anthropic' | 'openai' | 'gemini' | 'groq' | 'xai') =>
+      ipcRenderer.invoke('models:list_provider', provider)
   },
   ledger: {
     summary: () => ipcRenderer.invoke('ledger:summary')
@@ -59,6 +61,7 @@ const api = {
     continue: (id: string, input: string) => ipcRenderer.invoke('agent:continue', id, input),
     kill: (id: string) => ipcRenderer.invoke('agent:kill', id),
     setModel: (id: string, model: string | null) => ipcRenderer.invoke('agent:set_model', id, model),
+    setName: (id: string, name: string | null) => ipcRenderer.invoke('agent:set_name', id, name),
     checkOverlap: (id: string) => ipcRenderer.invoke('agent:check_overlap', id),
     previewDiff: (id: string) => ipcRenderer.invoke('agent:preview_diff', id),
     merge: (id: string) => ipcRenderer.invoke('agent:merge', id),

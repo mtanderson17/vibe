@@ -83,7 +83,17 @@ function AgentTile({ agentId, onFocus, onClose }: {
     <div className={`control-tile status-${status}`} onClick={() => onFocus(agentId)}>
       <div className="control-tile-head">
         <span className={`status-dot status-${status}`} />
-        <strong>{agentId}</strong>
+        <strong
+          title="Click to rename"
+          style={{ cursor: 'text' }}
+          onClick={(e) => {
+            e.stopPropagation()
+            const next = prompt(`Rename ${agentId} (leave empty to reset):`, a?.displayName || '')
+            if (next !== null) window.vibe.agents.setName(agentId, next.trim() || null)
+          }}
+        >
+          {a?.displayName || agentId}
+        </strong>
         <span style={{ opacity: 0.6 }}>· {STATUS_LABEL[status]}</span>
         <div style={{ flex: 1 }} />
         {a?.step && a?.maxSteps && (

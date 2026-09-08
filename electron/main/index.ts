@@ -31,9 +31,10 @@ import { runPmAgent, getPmState, clearPmChat, bindPmSender } from './pmagent'
 import { readLedger, summarize } from './ledger'
 import { bindApprovalSender, respondToApproval } from './approval'
 import { shutdownAllApps } from './launcher'
+import { listProviderModels } from './catalog'
 import { readSummary, writeSummary, summaryLastModified } from './context'
 import { readContext, writeContext } from './context'
-import { bindSender, startAgent, continueAgent, killAgent, listAgents, ensureAgent, getAgent, emit, hydrateAgentsFromWorkspace, spawnAgent, closeAgent, setAgentModel } from './agent'
+import { bindSender, startAgent, continueAgent, killAgent, listAgents, ensureAgent, getAgent, emit, hydrateAgentsFromWorkspace, spawnAgent, closeAgent, setAgentModel, setAgentName } from './agent'
 import { deleteAgentFile, saveAgent } from './persistence'
 
 let mainWindow: BrowserWindow | null = null
@@ -154,6 +155,18 @@ function registerIpc(): void {
     return summarize(entries)
   })
 
+  ipcMain.handle('models:list_provider', async (_e, provider: 'anthropic' | 'openai' | 'gemini' | 'groq' | 'xai') => {
+    const cfg = getConfig()
+    const keyMap: Record<string, string | null> = {
+      anthropic: cfg.anthropicApiKey,
+      openai: cfg.openaiApiKey,
+      gemini: cfg.geminiApiKey,
+      groq: cfg.groqApiKey,
+      xai: cfg.xaiApiKey
+    }
+    return listProviderModels(provider, keyMap[provider] ?? '')
+  })
+
   ipcMain.handle('models:pricing', async () => {
     try {
       const res = await fetch('https://openrouter.ai/api/v1/models')
@@ -240,6 +253,11 @@ function registerIpc(): void {
 
   ipcMain.handle('agent:set_model', async (_e, id: string, model: string | null) => {
     setAgentModel(id, model)
+    return { ok: true }
+  })
+
+  ipcMain.handle('agent:set_name', async (_e, id: string, name: string | null) => {
+    setAgentName(id, name)
     return { ok: true }
   })
 

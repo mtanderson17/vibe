@@ -381,7 +381,9 @@ export async function runPmAgent(trigger: 'merge' | 'manual' | 'chat', userInput
     : (userInput ?? 'Continue.')
 
   try {
-    await runPmLoop(cfg.workspacePath, cfg.model, kickoff)
+    // Use PM-specific model if configured, else the global default
+    const effectiveModel = (cfg.pmModel && cfg.pmModel.trim()) || cfg.model
+    await runPmLoop(cfg.workspacePath, effectiveModel, kickoff)
     state.status = 'idle'
     state.lastRun = new Date().toISOString()
     emit('status', 'idle')

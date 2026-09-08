@@ -166,14 +166,9 @@ Being upfront about the state of the app while it's still stabilizing:
 
 **Near term**
 - Container-per-agent isolation for `run_bash` sandboxing (approval shell already ships)
-- Encrypted key storage via Electron's `safeStorage`
-- PM-agent model override (individual agents already have per-agent override)
-- Dynamic model catalogs — fetch each provider's `/v1/models` endpoint at runtime
-  instead of hand-curating slug lists in `ModelChainPicker`
 - Ollama model badges in setup (mark which support tool calling)
 - Streaming for Ollama (currently only OpenRouter/Anthropic stream)
 - Playwright-driven UI tests
-- Command palette (Cmd+K)
 
 **Mid term**
 - **MCP client support** — connect to Model Context Protocol servers so agents can

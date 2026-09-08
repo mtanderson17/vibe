@@ -50,6 +50,7 @@ const CURATED: Record<string, string[]> = {
 export default function ModelChainPicker({ value, onChange, config, compact = false }: Props) {
   const [freeProbe, setFreeProbe] = useState<Array<{ slug: string; status: string; contextLength?: number }>>([])
   const [ollamaModels, setOllamaModels] = useState<string[]>([])
+  const [byokCatalogs, setByokCatalogs] = useState<Record<string, string[]>>({})
   const [customInput, setCustomInput] = useState('')
   const [probing, setProbing] = useState(false)
 
@@ -58,6 +59,23 @@ export default function ModelChainPicker({ value, onChange, config, compact = fa
       if (r.available) setOllamaModels(r.models.map(m => m.name))
     })
   }, [])
+
+  // Fetch each configured provider's live model catalog once
+  useEffect(() => {
+    const providers: Array<{ key: 'anthropic' | 'openai' | 'gemini' | 'groq' | 'xai'; hasKey: boolean }> = [
+      { key: 'anthropic', hasKey: !!config.anthropicApiKey },
+      { key: 'openai',    hasKey: !!config.openaiApiKey },
+      { key: 'gemini',    hasKey: !!config.geminiApiKey },
+      { key: 'groq',      hasKey: !!config.groqApiKey },
+      { key: 'xai',       hasKey: !!config.xaiApiKey }
+    ]
+    for (const { key, hasKey } of providers) {
+      if (!hasKey || byokCatalogs[key]) continue
+      window.vibe.models.listProvider(key).then(list => {
+        setByokCatalogs(prev => ({ ...prev, [key]: list }))
+      }).catch(() => { /* keep curated fallback */ })
+    }
+  }, [config.anthropicApiKey, config.openaiApiKey, config.geminiApiKey, config.groqApiKey, config.xaiApiKey, byokCatalogs])
 
   const runProbe = useCallback(async () => {
     if (!config.openrouterApiKey) return
@@ -85,22 +103,17 @@ export default function ModelChainPicker({ value, onChange, config, compact = fa
   const options: ModelOption[] = useMemo(() => {
     const opts: ModelOption[] = []
 
-    // BYOK curated models — only shown if the corresponding key is set
-    if (config.anthropicApiKey) {
-      for (const slug of CURATED.anthropic) opts.push({ slug, label: slug, source: 'anthropic', available: true })
+    // BYOK models: prefer dynamically fetched catalog, fall back to curated
+    const listFor = (key: string, source: ModelOption['source']) => {
+      const dynamic = byokCatalogs[key]
+      const list = dynamic && dynamic.length > 0 ? dynamic : (CURATED[key] ?? [])
+      for (const slug of list) opts.push({ slug, label: slug, source, available: true })
     }
-    if (config.openaiApiKey) {
-      for (const slug of CURATED.openai) opts.push({ slug, label: slug, source: 'openai', available: true })
-    }
-    if (config.geminiApiKey) {
-      for (const slug of CURATED.gemini) opts.push({ slug, label: slug, source: 'gemini', available: true })
-    }
-    if (config.groqApiKey) {
-      for (const slug of CURATED.groq) opts.push({ slug, label: slug, source: 'groq', available: true })
-    }
-    if (config.xaiApiKey) {
-      for (const slug of CURATED.xai) opts.push({ slug, label: slug, source: 'xai', available: true })
-    }
+    if (config.anthropicApiKey) listFor('anthropic', 'anthropic')
+    if (config.openaiApiKey)    listFor('openai', 'openai')
+    if (config.geminiApiKey)    listFor('gemini', 'gemini')
+    if (config.groqApiKey)      listFor('groq', 'groq')
+    if (config.xaiApiKey)       listFor('xai', 'xai')
 
     // Ollama detected locally
     for (const name of ollamaModels) {
@@ -122,7 +135,7 @@ export default function ModelChainPicker({ value, onChange, config, compact = fa
     }
 
     return opts
-  }, [config, freeProbe, ollamaModels])
+  }, [config, freeProbe, ollamaModels, byokCatalogs])
 
   const grouped = useMemo(() => {
     const byGroup: Record<string, ModelOption[]> = {}

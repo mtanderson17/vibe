@@ -31,6 +31,7 @@ export interface TokenUsage {
 
 export interface AgentState {
   id: string
+  displayName?: string     // user-editable label; falls back to id if unset
   status: AgentStatus
   task: string | null
   branch: string | null
@@ -53,6 +54,7 @@ export interface Config {
   groqApiKey: string | null
   xaiApiKey: string | null
   model: string
+  pmModel: string | null   // optional PM-specific model; falls back to global model if null/empty
   maxSteps: number
   agentCount: number
 }
