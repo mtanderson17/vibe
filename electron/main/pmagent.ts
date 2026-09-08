@@ -250,7 +250,11 @@ async function executePmTool(
   }
 }
 
-function buildPmSystemPrompt(projectContext: string, currentSummary: string, tasksBrief: string): string {
+function buildPmSystemPrompt(projectContext: string, currentSummary: string, tasksBrief: string, trigger: 'merge' | 'manual' | 'chat'): string {
+  const summaryDirective = trigger === 'chat'
+    ? 'If the user asked a question you can just answer, call finish with the answer. If they asked you to change something (update summary, propose task, launch app), do that first, THEN call finish.'
+    : `You MUST call \`update_summary\` at least once this run — even if changes since last summary are small, produce a fresh version that reflects the current state. Do NOT call \`finish\` before calling \`update_summary\`. If you truly have nothing to change, write the existing summary back verbatim so the file's timestamp updates and users see PM ran.`
+
   return `You are the Project Manager agent for a coding project managed via the Vibe IDE.
 
 Your job:
@@ -262,9 +266,9 @@ Your job:
 
 Rules:
 - Be terse. The summary is prepended to every agent prompt — every wasted word costs.
+- ${summaryDirective}
 - Only propose tasks that follow from observed reality (a broken test, a TODO in code, a partial implementation). No feature-brainstorming.
 - Check existing tasks before proposing — never propose duplicates.
-- Call \`finish\` when done. If asked a question you can just answer, call finish with the answer.
 
 Existing project context (human-owned, do not edit):
 ${projectContext}
@@ -276,7 +280,7 @@ Current tasks:
 ${tasksBrief}`
 }
 
-async function runPmLoop(workspace: string, model: string, kickoff: string): Promise<void> {
+async function runPmLoop(workspace: string, model: string, kickoff: string, trigger: 'merge' | 'manual' | 'chat'): Promise<void> {
   const cfg = getConfig()
   const projectContext = await readContext(workspace).catch(() => '(no project context)')
   const currentSummary = await readSummary(workspace).catch(() => '(no summary yet)')
@@ -287,7 +291,7 @@ async function runPmLoop(workspace: string, model: string, kickoff: string): Pro
 
   const systemMsg: Message = {
     role: 'system',
-    content: buildPmSystemPrompt(projectContext, currentSummary, tasksBrief)
+    content: buildPmSystemPrompt(projectContext, currentSummary, tasksBrief, trigger)
   }
   const userMsg: Message = { role: 'user', content: kickoff }
 
@@ -301,6 +305,7 @@ async function runPmLoop(workspace: string, model: string, kickoff: string): Pro
 
   let steps = 0
   const MAX = 12
+  let updateSummaryWasCalled = false
 
   while (steps < MAX) {
     steps++
@@ -351,12 +356,26 @@ async function runPmLoop(workspace: string, model: string, kickoff: string): Pro
 
     const result = await executeToolCalls({
       toolCalls: message.toolCalls,
-      execute: (name, args) => executePmTool(workspace, name, args)
+      execute: (name, args) => {
+        if (name === 'update_summary') updateSummaryWasCalled = true
+        return executePmTool(workspace, name, args)
+      }
     })
     messages.push(...result.messages)
     state.messages.push(...result.messages)
     result.messages.forEach(m => emit('message', m))
     if (result.calledFinish) break
+  }
+
+  // Merge/manual triggers should always update the summary. If the model called
+  // finish without touching update_summary, surface that so the UI at least shows
+  // the PM ran but nothing changed — better than silent no-op.
+  if (!updateSummaryWasCalled && trigger !== 'chat') {
+    state.messages.push({
+      role: 'system',
+      content: `[PM finished without calling update_summary. The summary file was not touched. Try Regenerate again — the model may have skipped the tool call.]`
+    })
+    emit('message', state.messages[state.messages.length - 1])
   }
 }
 
@@ -383,7 +402,7 @@ export async function runPmAgent(trigger: 'merge' | 'manual' | 'chat', userInput
   try {
     // Use PM-specific model if configured, else the global default
     const effectiveModel = (cfg.pmModel && cfg.pmModel.trim()) || cfg.model
-    await runPmLoop(cfg.workspacePath, effectiveModel, kickoff)
+    await runPmLoop(cfg.workspacePath, effectiveModel, kickoff, trigger)
     state.status = 'idle'
     state.lastRun = new Date().toISOString()
     emit('status', 'idle')

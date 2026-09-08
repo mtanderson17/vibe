@@ -60,9 +60,16 @@ export function setConfig(partial: Partial<Config>): Config {
   return getConfig()
 }
 
+// Pure MRU calculation — extracted for testability.
+// Moves `path` to the front, dedups, caps at maxItems (default 10).
+export function computeMru(currentList: string[], path: string, maxItems = 10): string[] {
+  const list = currentList.filter(p => p !== path)
+  list.unshift(path)
+  return list.slice(0, maxItems)
+}
+
 // Push a workspace path to the front of the recent list (MRU, capped at 10).
 export function pushRecentWorkspace(path: string): void {
-  const list = (store.get('recentWorkspaces') ?? []).filter(p => p !== path)
-  list.unshift(path)
-  store.set('recentWorkspaces', list.slice(0, 10))
+  const current = store.get('recentWorkspaces') ?? []
+  store.set('recentWorkspaces', computeMru(current, path))
 }
