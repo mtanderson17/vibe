@@ -31,9 +31,13 @@ export const useAgents = create<AgentsStore>((set) => ({
     return { agents: next, focused: state.focused === id ? '' : state.focused }
   }),
   applyEvent: (event) => set(state => {
-    // Ignore events for agents that have been closed/removed.
-    // Otherwise a late status/stream event from the still-winding-down loop
-    // would resurrect the deleted agent in the UI.
+    // `sync` events always apply — they carry the full agent state and may create
+    // an entry (e.g. rename from a tab before the agent has been started).
+    if (event.type === 'sync') {
+      return { agents: { ...state.agents, [event.agentId]: event.data as AgentState } }
+    }
+    // Otherwise: ignore events for agents that have been closed/removed to avoid
+    // resurrecting them from a still-winding-down loop's late events.
     const a = state.agents[event.agentId]
     if (!a) return state
     const updated: AgentState = { ...a, messages: [...a.messages] }

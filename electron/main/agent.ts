@@ -67,23 +67,27 @@ export function spawnAgent(): AgentState {
   return a
 }
 
+// Ensure the agent exists in memory even if the user has never started it —
+// otherwise renames from the tab/tile silently do nothing when Vibe first opens.
+function ensureAgentForSideChannel(id: string): AgentState {
+  return ensureAgent(id)
+}
+
 export function setAgentName(id: string, displayName: string | null): void {
-  const agent = agents.get(id)
-  if (!agent) return
+  const agent = ensureAgentForSideChannel(id)
   agent.displayName = displayName?.trim() || undefined
   persist(agent)
-  emit({ agentId: id, type: 'status', data: agent.status })
+  emit({ agentId: id, type: 'sync', data: agent })
 }
 
 export function setAgentModel(id: string, modelOverride: string | null): void {
-  const agent = agents.get(id)
-  if (!agent) return
+  const agent = ensureAgentForSideChannel(id)
   agent.modelOverride = modelOverride ?? undefined
   // Reset pin so the next turn uses the new model. Otherwise the previous
   // pinned slug (which may not match the new provider) would keep being used.
   agent.pinnedModel = undefined
   persist(agent)
-  emit({ agentId: id, type: 'status', data: agent.status })
+  emit({ agentId: id, type: 'sync', data: agent })
 }
 
 export function closeAgent(id: string): void {

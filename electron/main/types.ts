@@ -17,7 +17,7 @@ export interface Message {
 
 export interface AgentEvent {
   agentId: string
-  type: 'status' | 'message' | 'tool_call' | 'tool_result' | 'error' | 'done' | 'usage' | 'stream_start' | 'stream_delta' | 'stream_end' | 'step'
+  type: 'status' | 'message' | 'tool_call' | 'tool_result' | 'error' | 'done' | 'usage' | 'stream_start' | 'stream_delta' | 'stream_end' | 'step' | 'sync'
   data: unknown
 }
 
