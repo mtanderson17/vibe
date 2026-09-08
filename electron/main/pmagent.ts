@@ -47,16 +47,16 @@ const PM_TOOL_SCHEMAS = [
     type: 'function',
     function: {
       name: 'read_file',
-      description: 'Read a file from the workspace root (main branch view). Path is relative to workspace root.',
-      parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] }
+      description: 'Read a file from the project directory. Paths MUST be RELATIVE (e.g. "src/main.py", "README.md"). Do NOT use absolute paths starting with /, C:\\, /workspace/, etc. — those will fail. Use "." for the root.',
+      parameters: { type: 'object', properties: { path: { type: 'string', description: 'Relative path from project root, e.g. "src/index.ts"' } }, required: ['path'] }
     }
   },
   {
     type: 'function',
     function: {
       name: 'list_files',
-      description: 'List files/directories at a path relative to workspace root. Use "." for root.',
-      parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] }
+      description: 'List files/directories at a path relative to project root. Use "." for root. Paths MUST be relative (no leading /, no /workspace/ prefix).',
+      parameters: { type: 'object', properties: { path: { type: 'string', description: 'Relative path from project root, or "." for root' } }, required: ['path'] }
     }
   },
   {
@@ -288,6 +288,8 @@ Rules:
 - ${summaryDirective}
 - Only propose tasks that follow from observed reality (a broken test, a TODO in code, a partial implementation). No feature-brainstorming.
 - Check existing tasks before proposing — never propose duplicates.
+- Use ONLY the tools listed above. Do NOT invent tool names like \`exec\`, \`shell\`, \`bash\`, \`run\`, \`fetch\`, \`http\`. If you need to run a shell command, that's not available to you — describe what would need to run in your finish summary.
+- File paths for read_file/list_files are RELATIVE to the project root. Never use absolute paths (no leading /, no /workspace/, no C:\\).
 
 Existing project context (human-owned, do not edit):
 ${projectContext}
