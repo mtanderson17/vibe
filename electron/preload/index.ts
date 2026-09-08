@@ -60,6 +60,7 @@ const api = {
     kill: (id: string) => ipcRenderer.invoke('agent:kill', id),
     setModel: (id: string, model: string | null) => ipcRenderer.invoke('agent:set_model', id, model),
     checkOverlap: (id: string) => ipcRenderer.invoke('agent:check_overlap', id),
+    previewDiff: (id: string) => ipcRenderer.invoke('agent:preview_diff', id),
     merge: (id: string) => ipcRenderer.invoke('agent:merge', id),
     abortMerge: () => ipcRenderer.invoke('agent:abort_merge'),
     resolveConflicts: (id: string, files: string[]) => ipcRenderer.invoke('agent:resolve_conflicts', id, files),

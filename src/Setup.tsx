@@ -27,16 +27,83 @@ const STATUS_LABELS: Record<ProbeResult['status'], { text: string; color: string
   error:         { text: 'error',        color: 'var(--red)',     icon: '✗' }
 }
 
+interface ProviderSpec {
+  key: keyof Config          // config field
+  label: string
+  console: string             // where to get the key
+  consoleUrl: string
+  placeholder: string
+  slugExample: string
+  hint: string
+}
+
+const PROVIDERS: ProviderSpec[] = [
+  {
+    key: 'openrouterApiKey',
+    label: 'OpenRouter',
+    console: 'openrouter.ai',
+    consoleUrl: 'https://openrouter.ai/keys',
+    placeholder: 'sk-or-v1-...',
+    slugExample: 'meta-llama/llama-3.3-70b-instruct:free',
+    hint: 'Router across 200+ models. Free tier included. The default and most flexible option.'
+  },
+  {
+    key: 'anthropicApiKey',
+    label: 'Anthropic',
+    console: 'console.anthropic.com',
+    consoleUrl: 'https://console.anthropic.com/settings/keys',
+    placeholder: 'sk-ant-api03-...',
+    slugExample: 'anthropic/claude-sonnet-4-6',
+    hint: 'Claude models direct. Best coding quality; BYOK for full cost transparency.'
+  },
+  {
+    key: 'openaiApiKey',
+    label: 'OpenAI',
+    console: 'platform.openai.com',
+    consoleUrl: 'https://platform.openai.com/api-keys',
+    placeholder: 'sk-proj-...',
+    slugExample: 'openai/gpt-5',
+    hint: 'GPT models direct.'
+  },
+  {
+    key: 'geminiApiKey',
+    label: 'Google Gemini',
+    console: 'aistudio.google.com',
+    consoleUrl: 'https://aistudio.google.com/apikey',
+    placeholder: 'AIza...',
+    slugExample: 'google/gemini-2.5-pro',
+    hint: 'Long-context Google models. Uses their OpenAI-compat endpoint.'
+  },
+  {
+    key: 'groqApiKey',
+    label: 'Groq',
+    console: 'console.groq.com',
+    consoleUrl: 'https://console.groq.com/keys',
+    placeholder: 'gsk_...',
+    slugExample: 'groq/llama-3.3-70b-versatile',
+    hint: 'Very fast inference for open-weight models.'
+  },
+  {
+    key: 'xaiApiKey',
+    label: 'xAI (Grok)',
+    console: 'console.x.ai',
+    consoleUrl: 'https://console.x.ai',
+    placeholder: 'xai-...',
+    slugExample: 'xai/grok-4',
+    hint: 'Grok models direct.'
+  }
+]
+
 export default function Setup({ config, onSaved }: Props) {
-  const [apiKey, setApiKey] = useState(config.openrouterApiKey ?? '')
-  const [anthropicKey, setAnthropicKey] = useState(config.anthropicApiKey ?? '')
-  const [openaiKey, setOpenaiKey] = useState(config.openaiApiKey ?? '')
-  const [geminiKey, setGeminiKey] = useState(config.geminiApiKey ?? '')
-  const [groqKey, setGroqKey] = useState(config.groqApiKey ?? '')
-  const [xaiKey, setXaiKey] = useState(config.xaiApiKey ?? '')
-  const [showMoreProviders, setShowMoreProviders] = useState(
-    !!(config.openaiApiKey || config.geminiApiKey || config.groqApiKey || config.xaiApiKey)
-  )
+  const [keys, setKeys] = useState<Record<string, string>>({
+    openrouterApiKey: config.openrouterApiKey ?? '',
+    anthropicApiKey: config.anthropicApiKey ?? '',
+    openaiApiKey: config.openaiApiKey ?? '',
+    geminiApiKey: config.geminiApiKey ?? '',
+    groqApiKey: config.groqApiKey ?? '',
+    xaiApiKey: config.xaiApiKey ?? ''
+  })
+  const [revealed, setRevealed] = useState<Set<string>>(new Set())
   const [workspace, setWorkspace] = useState(config.workspacePath ?? '')
   const [model, setModel] = useState(config.model)
   const [agentCount, setAgentCount] = useState(config.agentCount ?? 4)
@@ -45,7 +112,6 @@ export default function Setup({ config, onSaved }: Props) {
   const [probeResults, setProbeResults] = useState<ProbeResult[]>([])
   const [ollama, setOllama] = useState<OllamaState | null>(null)
 
-  // Detect Ollama on mount — no key needed
   useEffect(() => {
     window.vibe.probe.ollama().then(r => setOllama(r as OllamaState))
   }, [])
@@ -56,18 +122,16 @@ export default function Setup({ config, onSaved }: Props) {
   }
 
   async function probe() {
-    if (!apiKey.trim()) return
+    if (!keys.openrouterApiKey?.trim()) return
     setProbing(true)
     setProbeResults([])
     try {
-      const results = await window.vibe.probe.openrouter(apiKey.trim())
+      const results = await window.vibe.probe.openrouter(keys.openrouterApiKey.trim())
       setProbeResults(results)
-      // Auto-select the first working model if the current selection isn't in the OK set
       const working = results.filter(r => r.status === 'ok')
       const currentSlugs = model.split(',').map(s => s.trim())
       const currentIsWorking = currentSlugs.some(s => working.find(w => w.slug === s))
       if (working.length && !currentIsWorking) {
-        // Build a fallback chain: first working + others as backups
         setModel(working.slice(0, 3).map(w => w.slug).join(','))
       }
     } finally {
@@ -77,209 +141,220 @@ export default function Setup({ config, onSaved }: Props) {
 
   async function save() {
     setSaving(true)
-    const next = await window.vibe.config.set({
-      openrouterApiKey: apiKey.trim() || null,
-      anthropicApiKey: anthropicKey.trim() || null,
-      openaiApiKey: openaiKey.trim() || null,
-      geminiApiKey: geminiKey.trim() || null,
-      groqApiKey: groqKey.trim() || null,
-      xaiApiKey: xaiKey.trim() || null,
+    const patch: Partial<Config> = {
+      openrouterApiKey: keys.openrouterApiKey.trim() || null,
+      anthropicApiKey: keys.anthropicApiKey.trim() || null,
+      openaiApiKey: keys.openaiApiKey.trim() || null,
+      geminiApiKey: keys.geminiApiKey.trim() || null,
+      groqApiKey: keys.groqApiKey.trim() || null,
+      xaiApiKey: keys.xaiApiKey.trim() || null,
       workspacePath: workspace.trim() || null,
       model,
       agentCount: Math.max(1, Math.min(8, agentCount))
-    })
+    }
+    const next = await window.vibe.config.set(patch)
     setSaving(false)
     onSaved(next)
   }
 
-  const hasAnyProvider =
-    apiKey.trim() || anthropicKey.trim() || openaiKey.trim() ||
-    geminiKey.trim() || groqKey.trim() || xaiKey.trim() ||
-    ollama?.available
-  const ready = hasAnyProvider && workspace.trim() && model.trim()
+  const isFirstRun = !config.workspacePath
+  const hasAnyKey = Object.values(keys).some(v => v?.trim())
+  const ready = (hasAnyKey || ollama?.available) && workspace.trim() && model.trim()
+
+  function toggleReveal(k: string) {
+    setRevealed(prev => {
+      const next = new Set(prev)
+      if (next.has(k)) next.delete(k); else next.add(k)
+      return next
+    })
+  }
 
   return (
-    <div className="setup">
-      <h1>Welcome to Vibe.</h1>
-      <p>A command center for agent-driven development. Free forever, open source. Two minutes to set up.</p>
-
-      {ollama?.available && ollama.models.length > 0 && (
-        <div className="setup-callout">
-          <strong>Ollama detected</strong> at {ollama.baseUrl} · {ollama.models.length} model{ollama.models.length !== 1 ? 's' : ''} available.
-          <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {ollama.models.slice(0, 6).map(m => (
-              <button
-                key={m.name}
-                onClick={() => setModel(`ollama/${m.name}`)}
-                style={{ fontSize: 11, padding: '3px 8px' }}
-              >
-                Use {m.name}
-              </button>
-            ))}
-          </div>
-          <p style={{ fontSize: 11, marginTop: 6, marginBottom: 0, opacity: 0.7 }}>
-            Click a model to use it directly (no API key required). Choose one that supports tool-calling
-            (e.g. llama3.1, llama3.2, qwen2.5-coder) for best results.
-          </p>
-        </div>
-      )}
-
-      <div className="field">
-        <label>OpenRouter API key</label>
-        <div className="row">
-          <input
-            type="password"
-            value={apiKey}
-            onChange={e => setApiKey(e.target.value)}
-            placeholder="sk-or-v1-..."
-          />
-          <button onClick={probe} disabled={!apiKey.trim() || probing}>
-            {probing ? 'Testing…' : 'Test free models'}
-          </button>
-        </div>
-        <p style={{ fontSize: 11, marginTop: 4 }}>
-          Free at <span style={{ color: 'var(--accent)' }}>openrouter.ai</span> — no credit card required.
-        </p>
-      </div>
-
-      <div className="field">
-        <label>Anthropic API key (BYOK)</label>
-        <input
-          type="password"
-          value={anthropicKey}
-          onChange={e => setAnthropicKey(e.target.value)}
-          placeholder="sk-ant-api03-..."
-        />
-        <p style={{ fontSize: 11, marginTop: 4 }}>
-          <span style={{ color: 'var(--accent)' }}>console.anthropic.com</span> · use models like{' '}
-          <code>anthropic/claude-sonnet-4-6</code> or <code>anthropic/claude-haiku-4-5</code>
-        </p>
-      </div>
-
-      <div className="field">
-        <button
-          type="button"
-          onClick={() => setShowMoreProviders(!showMoreProviders)}
-          style={{ background: 'transparent', border: 'none', padding: 0, color: 'var(--accent)', cursor: 'pointer', fontSize: 12 }}
-        >
-          {showMoreProviders ? '▾' : '▸'} More providers (OpenAI, Gemini, Groq, xAI)
-        </button>
-      </div>
-
-      {showMoreProviders && (
-        <>
-          <div className="field">
-            <label>OpenAI API key</label>
-            <input type="password" value={openaiKey} onChange={e => setOpenaiKey(e.target.value)} placeholder="sk-proj-..." />
-            <p style={{ fontSize: 11, marginTop: 4 }}>
-              <span style={{ color: 'var(--accent)' }}>platform.openai.com</span> · use models like{' '}
-              <code>openai/gpt-5</code> or <code>openai/gpt-5-mini</code>
+    <div className="settings-page">
+      <div className="settings-inner">
+        <header className="settings-header">
+          <div>
+            <h1>{isFirstRun ? 'Welcome to Vibe.' : 'Settings'}</h1>
+            <p className="settings-subtitle">
+              {isFirstRun
+                ? 'A command center for agent-driven development. Free forever, open source.'
+                : 'API keys, model routing, workspace, and agent limits.'}
             </p>
           </div>
+        </header>
 
-          <div className="field">
-            <label>Google Gemini API key</label>
-            <input type="password" value={geminiKey} onChange={e => setGeminiKey(e.target.value)} placeholder="AIza..." />
-            <p style={{ fontSize: 11, marginTop: 4 }}>
-              <span style={{ color: 'var(--accent)' }}>aistudio.google.com</span> · use models like{' '}
-              <code>google/gemini-2.5-pro</code> or <code>google/gemini-2.5-flash</code>
-            </p>
+        {/* Workspace */}
+        <section className="settings-section">
+          <div className="settings-section-title">Workspace</div>
+          <div className="settings-section-body">
+            <div className="settings-field">
+              <label>Project folder</label>
+              <div className="row-inline">
+                <input
+                  value={workspace}
+                  onChange={e => setWorkspace(e.target.value)}
+                  placeholder="C:\path\to\your\project"
+                />
+                <button onClick={pickWorkspace}>Browse…</button>
+              </div>
+              <p className="hint">A git repo (with a sensible <code>.gitignore</code>) will be initialized here if one doesn't exist.</p>
+            </div>
+
+            <div className="settings-field">
+              <label>Concurrent agents (1–8)</label>
+              <input
+                type="number"
+                min={1}
+                max={8}
+                value={agentCount}
+                onChange={e => setAgentCount(parseInt(e.target.value) || 1)}
+                style={{ width: 100 }}
+              />
+              <p className="hint">More agents = more parallelism, more RAM, more API load.</p>
+            </div>
           </div>
+        </section>
 
-          <div className="field">
-            <label>Groq API key</label>
-            <input type="password" value={groqKey} onChange={e => setGroqKey(e.target.value)} placeholder="gsk_..." />
-            <p style={{ fontSize: 11, marginTop: 4 }}>
-              <span style={{ color: 'var(--accent)' }}>console.groq.com</span> · very fast inference · use models like{' '}
-              <code>groq/llama-3.3-70b-versatile</code>
-            </p>
+        {/* Model */}
+        <section className="settings-section">
+          <div className="settings-section-title">Default model</div>
+          <div className="settings-section-body">
+            <div className="settings-field">
+              <label>Model slug (comma-separated for fallback chain)</label>
+              <div className="row-inline">
+                <input
+                  value={model}
+                  onChange={e => setModel(e.target.value)}
+                  placeholder="openrouter/free,minimax/minimax-m3:free"
+                />
+                <button onClick={probe} disabled={!keys.openrouterApiKey?.trim() || probing}>
+                  {probing ? 'Testing…' : 'Test free models'}
+                </button>
+              </div>
+              <p className="hint">
+                Applies globally. Individual agents can override in their header. Use prefixes like{' '}
+                <code>anthropic/</code>, <code>openai/</code>, <code>ollama/</code> to route direct when the corresponding key is set below.
+              </p>
+            </div>
+
+            {probeResults.length > 0 && (
+              <div className="settings-field">
+                <label>Live free-tier models (tested against your OpenRouter key)</label>
+                <div className="probe-list">
+                  {probeResults.map(r => {
+                    const meta = STATUS_LABELS[r.status]
+                    const selected = model.split(',').map(s => s.trim()).includes(r.slug)
+                    return (
+                      <div
+                        key={r.slug}
+                        className={`probe-row ${selected ? 'selected' : ''} ${r.status === 'ok' ? 'clickable' : 'dim'}`}
+                        onClick={() => {
+                          if (r.status !== 'ok') return
+                          const list = model.split(',').map(s => s.trim()).filter(Boolean)
+                          const next = list.includes(r.slug)
+                            ? list.filter(s => s !== r.slug)
+                            : [r.slug, ...list]
+                          setModel(next.join(','))
+                        }}
+                      >
+                        <span style={{ color: meta.color, width: 14 }}>{meta.icon}</span>
+                        <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 12 }}>{r.slug}</span>
+                        {r.contextLength && (
+                          <span style={{ fontSize: 10, opacity: 0.6 }}>{(r.contextLength / 1000).toFixed(0)}k ctx</span>
+                        )}
+                        <span style={{ fontSize: 10, color: meta.color }}>{meta.text}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {ollama?.available && ollama.models.length > 0 && (
+              <div className="settings-field">
+                <label>Local Ollama detected</label>
+                <p className="hint" style={{ marginTop: 0 }}>
+                  {ollama.models.length} model{ollama.models.length !== 1 ? 's' : ''} available at {ollama.baseUrl}. No API key required.
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {ollama.models.slice(0, 8).map(m => (
+                    <button
+                      key={m.name}
+                      onClick={() => setModel(`ollama/${m.name}`)}
+                      style={{ fontSize: 11, padding: '4px 10px' }}
+                    >
+                      Use {m.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
+        </section>
 
-          <div className="field">
-            <label>xAI (Grok) API key</label>
-            <input type="password" value={xaiKey} onChange={e => setXaiKey(e.target.value)} placeholder="xai-..." />
-            <p style={{ fontSize: 11, marginTop: 4 }}>
-              <span style={{ color: 'var(--accent)' }}>console.x.ai</span> · use models like <code>xai/grok-4</code>
-            </p>
-          </div>
-        </>
-      )}
+        {/* API keys */}
+        <section className="settings-section">
+          <div className="settings-section-title">API keys</div>
+          <div className="settings-section-body">
+            <div className="trust-note">
+              <strong>Where your keys live.</strong> Encrypted at rest on macOS/Windows (or plaintext on Linux w/o keyring). Stored locally
+              in Electron's per-user data directory — never sent to Vibe. Full path in the README.
+            </div>
 
-      {probeResults.length > 0 && (
-        <div className="field">
-          <label>Free-tier models (tested against your key)</label>
-          <div className="probe-list">
-            {probeResults.map(r => {
-              const meta = STATUS_LABELS[r.status]
-              const selected = model.split(',').map(s => s.trim()).includes(r.slug)
+            {PROVIDERS.map(p => {
+              const currentValue = keys[p.key] ?? ''
+              const isSet = !!currentValue.trim()
+              const isRevealed = revealed.has(p.key)
               return (
-                <div
-                  key={r.slug}
-                  className={`probe-row ${selected ? 'selected' : ''} ${r.status === 'ok' ? 'clickable' : 'dim'}`}
-                  onClick={() => {
-                    if (r.status !== 'ok') return
-                    // Toggle in the comma-separated list, first entry becomes primary
-                    const list = model.split(',').map(s => s.trim()).filter(Boolean)
-                    const next = list.includes(r.slug)
-                      ? list.filter(s => s !== r.slug)
-                      : [r.slug, ...list]
-                    setModel(next.join(','))
-                  }}
-                >
-                  <span style={{ color: meta.color, width: 14 }}>{meta.icon}</span>
-                  <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 12 }}>{r.slug}</span>
-                  {r.contextLength && (
-                    <span style={{ fontSize: 10, opacity: 0.6 }}>{(r.contextLength / 1000).toFixed(0)}k ctx</span>
-                  )}
-                  <span style={{ fontSize: 10, color: meta.color }}>{meta.text}</span>
+                <div key={p.key} className="provider-row">
+                  <div className="provider-head">
+                    <span className="provider-name">{p.label}</span>
+                    <span className={`provider-status ${isSet ? 'set' : ''}`}>
+                      {isSet ? '● configured' : 'not set'}
+                    </span>
+                  </div>
+                  <div className="row-inline">
+                    <input
+                      type={isRevealed ? 'text' : 'password'}
+                      value={currentValue}
+                      onChange={e => setKeys(prev => ({ ...prev, [p.key]: e.target.value }))}
+                      placeholder={p.placeholder}
+                      autoComplete="off"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => toggleReveal(p.key)}
+                      title={isRevealed ? 'Hide' : 'Reveal'}
+                      style={{ minWidth: 68 }}
+                    >
+                      {isRevealed ? 'Hide' : 'Reveal'}
+                    </button>
+                  </div>
+                  <div className="provider-hint">
+                    {p.hint} · Get a key at{' '}
+                    <span style={{ color: 'var(--accent)', fontFamily: 'monospace', fontSize: 11 }}>{p.console}</span>{' '}
+                    · slug format <code>{p.slugExample}</code>
+                  </div>
                 </div>
               )
             })}
           </div>
-          <p style={{ fontSize: 11, marginTop: 4 }}>
-            Click ✓ models to build a fallback chain. First entry is the primary.
-          </p>
-        </div>
-      )}
+        </section>
 
-      <div className="field">
-        <label>Model (or fallback chain — comma separated)</label>
-        <input
-          type="text"
-          value={model}
-          onChange={e => setModel(e.target.value)}
-          placeholder="e.g. openrouter/free,meta-llama/llama-3.3-70b-instruct:free"
-        />
+        <footer className="settings-footer">
+          <div style={{ opacity: 0.7, fontSize: 12 }}>
+            {!ready && !hasAnyKey && !ollama?.available && (
+              <>Need at least one API key or a local Ollama install.</>
+            )}
+            {!ready && (!workspace.trim() || !model.trim()) && (
+              <>Workspace folder and model are required.</>
+            )}
+          </div>
+          <button className="primary" onClick={save} disabled={!ready || saving} style={{ padding: '10px 20px' }}>
+            {saving ? 'Saving…' : isFirstRun ? 'Start' : 'Save changes'}
+          </button>
+        </footer>
       </div>
-
-      <div className="field">
-        <label>Concurrent agents (1-8)</label>
-        <input
-          type="number"
-          min={1}
-          max={8}
-          value={agentCount}
-          onChange={e => setAgentCount(parseInt(e.target.value) || 1)}
-        />
-        <p style={{ fontSize: 11, marginTop: 4 }}>
-          More agents = more parallelism but more RAM and API load. 4 is a good starting point.
-        </p>
-      </div>
-
-      <div className="field">
-        <label>Workspace folder</label>
-        <div className="row">
-          <input value={workspace} onChange={e => setWorkspace(e.target.value)} placeholder="C:\path\to\your\project" />
-          <button onClick={pickWorkspace}>Browse…</button>
-        </div>
-        <p style={{ fontSize: 11, marginTop: 4 }}>
-          A git repo + sensible <code>.gitignore</code> will be initialized here if one doesn't exist.
-        </p>
-      </div>
-
-      <button className="primary" onClick={save} disabled={!ready || saving} style={{ width: '100%', padding: 10 }}>
-        {saving ? 'Saving…' : 'Start'}
-      </button>
     </div>
   )
 }

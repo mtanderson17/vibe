@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'node:path'
 import { getConfig, setConfig } from './config'
-import { ensureRepo, mergeBranch, abortMerge, removeWorktree, deleteBranch, branchChangedFiles } from './git'
+import { ensureRepo, mergeBranch, abortMerge, removeWorktree, deleteBranch, branchChangedFiles, branchDiff } from './git'
 import { resolveConflicts, applyResolution, commitResolution } from './resolver'
 import { probeOpenRouterFree, detectOllama } from './probe'
 import { loadTasks, createTask, updateTask, deleteTask } from './tasks'
@@ -30,6 +30,7 @@ async function completeTasksForAgent(workspacePath: string, agentId: string): Pr
 import { runPmAgent, getPmState, clearPmChat, bindPmSender } from './pmagent'
 import { readLedger, summarize } from './ledger'
 import { bindApprovalSender, respondToApproval } from './approval'
+import { shutdownAllApps } from './launcher'
 import { readSummary, writeSummary, summaryLastModified } from './context'
 import { readContext, writeContext } from './context'
 import { bindSender, startAgent, continueAgent, killAgent, listAgents, ensureAgent, getAgent, emit, hydrateAgentsFromWorkspace, spawnAgent, closeAgent, setAgentModel } from './agent'
@@ -76,7 +77,12 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  shutdownAllApps()
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  shutdownAllApps()
 })
 
 function registerIpc(): void {
@@ -235,6 +241,13 @@ function registerIpc(): void {
   ipcMain.handle('agent:set_model', async (_e, id: string, model: string | null) => {
     setAgentModel(id, model)
     return { ok: true }
+  })
+
+  ipcMain.handle('agent:preview_diff', async (_e, id: string) => {
+    const cfg = getConfig()
+    const agent = getAgent(id)
+    if (!cfg.workspacePath || !agent?.branch) return { files: [], totalAdded: 0, totalRemoved: 0 }
+    return await branchDiff(cfg.workspacePath, agent.branch)
   })
 
   ipcMain.handle('agent:check_overlap', async (_e, id: string) => {

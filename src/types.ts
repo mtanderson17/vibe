@@ -132,6 +132,11 @@ declare global {
         kill: (id: string) => Promise<{ ok: boolean }>
         setModel: (id: string, model: string | null) => Promise<{ ok: boolean }>
         checkOverlap: (id: string) => Promise<{ own: string[]; overlaps: Record<string, string[]> }>
+        previewDiff: (id: string) => Promise<{
+          files: Array<{ path: string; addedLines: number; removedLines: number; diff: string }>
+          totalAdded: number
+          totalRemoved: number
+        }>
         merge: (id: string) => Promise<{ ok: boolean; conflicts: string[]; output: string }>
         abortMerge: () => Promise<void>
         resolveConflicts: (id: string, files: string[]) => Promise<{

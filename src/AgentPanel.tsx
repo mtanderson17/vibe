@@ -3,6 +3,7 @@ import { useAgents } from './stores/agents'
 import MessageView from './components/MessageView'
 import FriendlyError from './components/FriendlyError'
 import ResolvedFileView, { type ResolvedFile } from './components/ResolvedFileView'
+import DiffView, { type FileDiff } from './components/DiffView'
 
 interface Props {
   agentId: string
@@ -25,6 +26,8 @@ export default function AgentPanel({ agentId }: Props) {
   const [resolving, setResolving] = useState(false)
   const [resolution, setResolution] = useState<{ files: ResolvedFile[]; servedBy?: string; error?: string } | null>(null)
   const [overlap, setOverlap] = useState<{ own: string[]; overlaps: Record<string, string[]> } | null>(null)
+  const [diff, setDiff] = useState<{ files: FileDiff[]; totalAdded: number; totalRemoved: number } | null>(null)
+  const [loadingDiff, setLoadingDiff] = useState(false)
   const chatRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -57,8 +60,20 @@ export default function AgentPanel({ agentId }: Props) {
 
   async function merge() {
     setResolution(null)
+    setDiff(null)
     const result = await window.vibe.agents.merge(agentId)
     setMergeResult(result)
+  }
+
+  async function previewDiff() {
+    if (diff) { setDiff(null); return }  // toggle
+    setLoadingDiff(true)
+    try {
+      const d = await window.vibe.agents.previewDiff(agentId)
+      setDiff(d)
+    } finally {
+      setLoadingDiff(false)
+    }
   }
 
   async function resolveWithAI() {
@@ -125,23 +140,35 @@ export default function AgentPanel({ agentId }: Props) {
       </div>
 
       {agent.status === 'awaiting_merge' && (
-        <div className={`merge-banner ${overlap && Object.keys(overlap.overlaps).length > 0 ? 'conflict' : ''}`}>
-          <div className="msg-text">
-            <div>Agent finished. Ready to merge <code>{agent.branch}</code> into main?</div>
-            {overlap && Object.keys(overlap.overlaps).length > 0 && (
-              <div style={{ marginTop: 8, fontSize: 12 }}>
-                <div style={{ fontWeight: 600, color: 'var(--yellow)' }}>⚠ Overlaps with sibling agents:</div>
-                {Object.entries(overlap.overlaps).map(([sib, files]) => (
-                  <div key={sib} style={{ marginTop: 4, fontFamily: 'monospace', fontSize: 11 }}>
-                    <span style={{ color: 'var(--accent)' }}>{sib}</span> also modified: {files.join(', ')}
-                  </div>
-                ))}
-                <div style={{ marginTop: 4, opacity: 0.8 }}>Merge conflicts are likely — you can still proceed.</div>
-              </div>
-            )}
+        <>
+          <div className={`merge-banner ${overlap && Object.keys(overlap.overlaps).length > 0 ? 'conflict' : ''}`}>
+            <div className="msg-text">
+              <div>Agent finished. Ready to merge <code>{agent.branch}</code> into main?</div>
+              {overlap && Object.keys(overlap.overlaps).length > 0 && (
+                <div style={{ marginTop: 8, fontSize: 12 }}>
+                  <div style={{ fontWeight: 600, color: 'var(--yellow)' }}>⚠ Overlaps with sibling agents:</div>
+                  {Object.entries(overlap.overlaps).map(([sib, files]) => (
+                    <div key={sib} style={{ marginTop: 4, fontFamily: 'monospace', fontSize: 11 }}>
+                      <span style={{ color: 'var(--accent)' }}>{sib}</span> also modified: {files.join(', ')}
+                    </div>
+                  ))}
+                  <div style={{ marginTop: 4, opacity: 0.8 }}>Merge conflicts are likely — you can still proceed.</div>
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={previewDiff} disabled={loadingDiff}>
+                {loadingDiff ? 'Loading…' : diff ? 'Hide diff' : 'Preview diff'}
+              </button>
+              <button className="primary" onClick={merge}>Merge</button>
+            </div>
           </div>
-          <button className="primary" onClick={merge}>Merge</button>
-        </div>
+          {diff && (
+            <div style={{ margin: '0 12px 12px' }}>
+              <DiffView files={diff.files} totalAdded={diff.totalAdded} totalRemoved={diff.totalRemoved} />
+            </div>
+          )}
+        </>
       )}
 
       {mergeResult && !resolution && (

@@ -12,6 +12,7 @@ import { appendLedgerEntry, estimateCost } from './ledger'
 import { getPricing } from './pricing'
 import { readContext, readSummary, writeSummary, summaryLastModified } from './context'
 import { createTask, loadTasks, updateTask } from './tasks'
+import { launchApp, stopApp, listRunningApps } from './launcher'
 
 const exec = promisify(execFile)
 
@@ -124,6 +125,40 @@ const PM_TOOL_SCHEMAS = [
   {
     type: 'function',
     function: {
+      name: 'launch_app',
+      description: 'Launch a long-running process (dev server, build watcher, tests in watch mode). Spawns detached from the workspace root and returns immediately with a pid. Use this when the human asks you to "run the app", "start the dev server", etc. Returns the pid, which you can pass to stop_app later.',
+      parameters: {
+        type: 'object',
+        properties: {
+          command: { type: 'string', description: 'Shell command to launch, e.g. "npm run dev" or "python main.py"' }
+        },
+        required: ['command']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'stop_app',
+      description: 'Stop a previously launched app by its pid. Kills the whole process tree.',
+      parameters: {
+        type: 'object',
+        properties: { pid: { type: 'integer' } },
+        required: ['pid']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_running_apps',
+      description: 'List all apps currently running that were launched via launch_app.',
+      parameters: { type: 'object', properties: {} }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'finish',
       description: 'Call when done. Provide a short summary of what you updated or proposed.',
       parameters: { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] }
@@ -191,6 +226,23 @@ async function executePmTool(
       if (!updated) return `[error] task ${args.task_id} not found`
       return `Updated ${updated.id}: status=${updated.status}${args.unassign ? ' (unassigned)' : ''}`
     }
+    case 'launch_app': {
+      try {
+        const launched = launchApp(String(args.command), workspace)
+        return `Launched (pid=${launched.pid}): ${launched.command}\nRunning in background. Use stop_app(pid=${launched.pid}) to stop it.`
+      } catch (e) {
+        return `[error] Failed to launch: ${(e as Error).message}`
+      }
+    }
+    case 'stop_app': {
+      const result = stopApp(Number(args.pid))
+      return result.message
+    }
+    case 'list_running_apps': {
+      const apps = listRunningApps()
+      if (apps.length === 0) return '(no apps running)'
+      return apps.map(a => `pid=${a.pid} · started ${a.startedAt} · ${a.command}`).join('\n')
+    }
     case 'finish':
       return `Done: ${args.summary}`
     default:
@@ -206,6 +258,7 @@ Your job:
 - Watch git history and update the summary to reflect real changes (not speculation)
 - Propose follow-up tasks for genuine gaps or tech debt, not aspirational features
 - Answer human questions about project state when they chat with you
+- Launch/stop the project's dev server or app when asked (use launch_app / stop_app)
 
 Rules:
 - Be terse. The summary is prepended to every agent prompt — every wasted word costs.

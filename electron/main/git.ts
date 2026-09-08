@@ -156,3 +156,38 @@ export async function branchChangedFiles(workspacePath: string, branch: string, 
     return []
   }
 }
+
+export interface BranchDiff {
+  files: Array<{
+    path: string
+    addedLines: number
+    removedLines: number
+    diff: string   // unified diff for this file
+  }>
+  totalAdded: number
+  totalRemoved: number
+}
+
+// Get a full unified diff of branch vs current HEAD (usually main), split per file.
+export async function branchDiff(workspacePath: string, branch: string): Promise<BranchDiff> {
+  const mergeBase = await git(workspacePath, ['merge-base', 'HEAD', branch]).catch(() => 'HEAD')
+  const stat = await git(workspacePath, ['diff', '--numstat', `${mergeBase}...${branch}`]).catch(() => '')
+
+  // Parse numstat lines: "<added>\t<removed>\t<path>"
+  const files: BranchDiff['files'] = []
+  let totalAdded = 0
+  let totalRemoved = 0
+  for (const line of stat.split('\n')) {
+    const parts = line.split('\t')
+    if (parts.length < 3) continue
+    const added = parseInt(parts[0], 10) || 0
+    const removed = parseInt(parts[1], 10) || 0
+    const relPath = parts.slice(2).join('\t')
+    totalAdded += added
+    totalRemoved += removed
+    // Fetch per-file diff (unified, 3 lines context — default)
+    const fileDiff = await git(workspacePath, ['diff', `${mergeBase}...${branch}`, '--', relPath]).catch(() => '')
+    files.push({ path: relPath, addedLines: added, removedLines: removed, diff: fileDiff })
+  }
+  return { files, totalAdded, totalRemoved }
+}
