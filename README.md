@@ -174,6 +174,9 @@ Being upfront about the state of the app while it's still stabilizing:
 - **MCP client support** — connect to Model Context Protocol servers so agents can
   use browser control (Playwright MCP), web search, DB access, Notion/Linear/Slack
   integrations, and the whole github.com/modelcontextprotocol/servers ecosystem
+- **Remote-dev / "Vibe on your VM"** — SSH into a machine, run Vibe against files
+  there as if local (pattern borrowed from Zed's remote-dev). Natural pairing with
+  BYOC — same protocol, single machine host, no cloud infrastructure needed
 - Bring-your-own-compute (BYOC): run agents on user-provided VMs
 - Automatic model routing (cheap for simple tasks, frontier for complex — via RouteLLM or similar)
 - Monaco editor pane for inline code review during agent turns
