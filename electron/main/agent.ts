@@ -254,8 +254,9 @@ async function runLoop(agent: AgentState): Promise<void> {
   }
 
   if (killed) {
+    // killAgent already set status + pushed the interrupted marker synchronously.
+    // Don't duplicate. Just make sure status is settled.
     agent.status = 'awaiting_input'
-    agent.messages.push({ role: 'system', content: '[Agent was interrupted by user]' })
   } else if (calledFinish) {
     await commitAll(agent.worktreePath, `vibe: agent ${agent.id} — ${(agent.task ?? '').slice(0, 60)}`)
     agent.status = 'awaiting_merge'
@@ -275,16 +276,33 @@ async function runLoop(agent: AgentState): Promise<void> {
 }
 
 export function killAgent(id: string): void {
+  console.log(`[vibe] killAgent(${id})`)
   const agent = agents.get(id)
   const abort = agentAborts.get(id)
   if (abort) abort.abort()
+  agentAborts.delete(id)  // free the map slot even if runLoop hasn't unwound yet
   killAgentProcesses(id)
-  // Immediately reflect the killed state so the UI feels instant, instead of
-  // waiting for the runLoop's current fetch to detect the abort (can be 1-3s).
-  if (agent && agent.status === 'running') {
-    agent.status = 'awaiting_input'
-    emit({ agentId: id, type: 'status', data: 'awaiting_input' })
+
+  if (!agent) return
+
+  // Trim a stale empty streaming placeholder that will never receive its stream_end.
+  const last = agent.messages[agent.messages.length - 1]
+  if (last && last.role === 'assistant' && !last.content && !last.toolCalls?.length) {
+    agent.messages.pop()
   }
+
+  // Push the interrupted marker synchronously so the UI has final state instantly,
+  // regardless of when the runLoop's own post-code finishes unwinding.
+  const alreadyMarked = agent.messages[agent.messages.length - 1]
+  if (!(alreadyMarked && alreadyMarked.role === 'system' && (alreadyMarked.content ?? '').includes('interrupted'))) {
+    agent.messages.push({ role: 'system', content: '[Agent was interrupted by user]' })
+  }
+
+  agent.status = 'awaiting_input'
+  agent.step = undefined
+  persist(agent)
+  // Full sync so renderer replaces state — avoids any lingering 'running' / placeholder in the UI.
+  emit({ agentId: id, type: 'sync', data: agent })
 }
 
 export async function startAgent(id: string, task: string): Promise<void> {
