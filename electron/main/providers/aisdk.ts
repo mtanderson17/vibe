@@ -272,6 +272,29 @@ function isRetryableProviderError(e: unknown): boolean {
   return /rate limit|429|502|503|not found|paid version|no models provided|no endpoints/i.test(msg)
 }
 
+// Format provider errors into short, actionable messages for the UI.
+// The raw AI SDK errors carry huge request bodies + stack traces; we distill.
+export function formatProviderError(e: unknown, label?: string): string {
+  const err = e as { statusCode?: number; message?: string; cause?: { code?: string; message?: string } }
+  const status = err.statusCode
+  const providerHint = label ? ` (${label})` : ''
+
+  if (status === 401 || /authentication|invalid.*api.*key|api.*key.*invalid/i.test(err.message ?? '')) {
+    return `API key rejected${providerHint} — check Settings and update the key. (${err.message ?? 'HTTP 401'})`
+  }
+  if (status === 402 || /credits|billing|insufficient/i.test(err.message ?? '')) {
+    return `Provider${providerHint} says your account has no credits or billing is disabled.`
+  }
+  if (status === 429) {
+    return `Rate limited${providerHint} — wait a moment and retry.`
+  }
+  if (err.cause?.code === 'UND_ERR_CONNECT_TIMEOUT' || /connect.*timeout|network|fetch failed/i.test(err.message ?? '')) {
+    return `Network error reaching provider${providerHint} — check connectivity or provider status.`
+  }
+  // Fallback: just the message, nothing else.
+  return err.message ?? String(e)
+}
+
 // Short one-shot for slug generation etc.
 export async function shortCompletion(
   keys: ProviderKeys,

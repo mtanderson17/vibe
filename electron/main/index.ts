@@ -73,6 +73,16 @@ async function createWindow(): Promise<void> {
   }
 }
 
+// Provider errors thrown from AI SDK streams sometimes surface as unhandled
+// rejections outside our try/catch (async iterators + retry internals). Log a
+// concise line instead of Node's default multi-KB dump.
+process.on('unhandledRejection', (reason) => {
+  const err = reason as { statusCode?: number; message?: string; name?: string }
+  const tag = err.name ?? 'UnhandledRejection'
+  const status = err.statusCode ? ` [${err.statusCode}]` : ''
+  console.warn(`[vibe] ${tag}${status}: ${err.message ?? String(reason)}`)
+})
+
 app.whenReady().then(() => {
   registerIpc()
   createWindow()

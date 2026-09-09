@@ -6,9 +6,11 @@
 // so the UI is never empty.
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000
+const NEGATIVE_TTL_MS = 60 * 1000     // don't re-hammer a failing endpoint
 
 interface CacheEntry { fetchedAt: number; models: string[] }
 const cache = new Map<string, CacheEntry>()
+const failedAt = new Map<string, number>()
 
 const CURATED: Record<string, string[]> = {
   anthropic: [
@@ -33,14 +35,22 @@ export async function listProviderModels(
   const cached = cache.get(cacheKey)
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached.models
 
+  // Skip network attempt entirely if a recent failure is still fresh.
+  const lastFail = failedAt.get(cacheKey)
+  if (lastFail && Date.now() - lastFail < NEGATIVE_TTL_MS) return CURATED[provider] ?? []
+
   try {
     const models = await fetchProviderModels(provider, apiKey)
     if (models.length > 0) {
       cache.set(cacheKey, { fetchedAt: Date.now(), models })
+      failedAt.delete(cacheKey)
       return models
     }
   } catch (e) {
-    console.warn(`[vibe] listProviderModels ${provider} failed, using curated`, e)
+    failedAt.set(cacheKey, Date.now())
+    // One concise line, no stack — network hiccups shouldn't spam the log.
+    const msg = (e as Error).message || String(e)
+    console.warn(`[vibe] listProviderModels ${provider}: ${msg} (using curated for ${NEGATIVE_TTL_MS / 1000}s)`)
   }
   return CURATED[provider] ?? []
 }

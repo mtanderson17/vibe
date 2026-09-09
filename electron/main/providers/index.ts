@@ -1,5 +1,5 @@
 // Public providers API. Backed by Vercel AI SDK (see aisdk.ts).
-export { chatCompletion, shortCompletion, resolveLanguageModel } from './aisdk'
+export { chatCompletion, shortCompletion, resolveLanguageModel, formatProviderError } from './aisdk'
 export type { CompletionResult, Usage, ProviderKeys, ChatCompletionOptions } from './aisdk'
 
 // Legacy providerFor kept for the tests that check routing prefix behavior.

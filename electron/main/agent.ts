@@ -1,6 +1,6 @@
 import type { WebContents } from 'electron'
 import type { AgentEvent, AgentState, Message } from './types'
-import { chatCompletion, shortCompletion } from './providers'
+import { chatCompletion, shortCompletion, formatProviderError } from './providers'
 import { executeTool, killAgentProcesses, allToolSchemas } from './tools'
 import { executeToolCalls, accumulateUsage, pinnedModelFor } from './tool-loop'
 import { createWorktree, commitAll } from './git'
@@ -373,7 +373,7 @@ export async function startAgent(id: string, task: string): Promise<void> {
     await runLoop(agent)
   } catch (e) {
     agent.status = 'error'
-    agent.error = (e as Error).message
+    agent.error = formatProviderError(e)
     emit({ agentId: id, type: 'error', data: agent.error })
     emit({ agentId: id, type: 'status', data: agent.status })
   }
@@ -426,7 +426,7 @@ export async function continueAgent(id: string, userInput: string): Promise<void
     await runLoop(agent)
   } catch (e) {
     agent.status = 'error'
-    agent.error = (e as Error).message
+    agent.error = formatProviderError(e)
     emit({ agentId: id, type: 'error', data: agent.error })
     emit({ agentId: id, type: 'status', data: agent.status })
   }

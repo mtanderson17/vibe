@@ -5,7 +5,7 @@ import { promisify } from 'node:util'
 import path from 'node:path'
 import type { WebContents } from 'electron'
 import type { Message, TokenUsage } from './types'
-import { chatCompletion } from './providers'
+import { chatCompletion, formatProviderError } from './providers'
 import { getConfig } from './config'
 import { executeToolCalls, accumulateUsage, pinnedModelFor } from './tool-loop'
 import { appendLedgerEntry, estimateCost } from './ledger'
@@ -458,7 +458,7 @@ export async function runPmAgent(trigger: 'merge' | 'manual' | 'chat', userInput
       emit('status', 'idle')
     } else {
       state.status = 'error'
-      state.error = (e as Error).message
+      state.error = formatProviderError(e)
       emit('error', state.error)
       emit('status', 'error')
     }
