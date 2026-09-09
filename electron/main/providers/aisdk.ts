@@ -266,7 +266,7 @@ function normalizeUsage(u: { inputTokens?: number; outputTokens?: number; totalT
 function isRetryableProviderError(e: unknown): boolean {
   const err = e as { statusCode?: number; message?: string; name?: string }
   if (typeof err.statusCode === 'number') {
-    return [400, 402, 404, 429, 500, 502, 503].includes(err.statusCode)
+    return [400, 402, 404, 429, 500, 502, 503, 504].includes(err.statusCode)
   }
   const msg = err.message ?? ''
   return /rate limit|429|502|503|not found|paid version|no models provided|no endpoints/i.test(msg)

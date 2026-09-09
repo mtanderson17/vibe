@@ -11,6 +11,9 @@ const NEGATIVE_TTL_MS = 60 * 1000     // don't re-hammer a failing endpoint
 interface CacheEntry { fetchedAt: number; models: string[] }
 const cache = new Map<string, CacheEntry>()
 const failedAt = new Map<string, number>()
+// Dedupe concurrent fetches — the UI can trigger 3-4 parallel calls when
+// Settings opens; without this, they all miss the negative-cache and spam.
+const inflight = new Map<string, Promise<string[]>>()
 
 const CURATED: Record<string, string[]> = {
   anthropic: [
@@ -35,24 +38,30 @@ export async function listProviderModels(
   const cached = cache.get(cacheKey)
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached.models
 
-  // Skip network attempt entirely if a recent failure is still fresh.
   const lastFail = failedAt.get(cacheKey)
   if (lastFail && Date.now() - lastFail < NEGATIVE_TTL_MS) return CURATED[provider] ?? []
 
-  try {
-    const models = await fetchProviderModels(provider, apiKey)
-    if (models.length > 0) {
-      cache.set(cacheKey, { fetchedAt: Date.now(), models })
-      failedAt.delete(cacheKey)
-      return models
+  // Coalesce parallel callers onto a single fetch.
+  const existing = inflight.get(cacheKey)
+  if (existing) return existing
+
+  const p = (async () => {
+    try {
+      const models = await fetchProviderModels(provider, apiKey)
+      if (models.length > 0) {
+        cache.set(cacheKey, { fetchedAt: Date.now(), models })
+        failedAt.delete(cacheKey)
+        return models
+      }
+    } catch (e) {
+      failedAt.set(cacheKey, Date.now())
+      const msg = (e as Error).message || String(e)
+      console.warn(`[vibe] listProviderModels ${provider}: ${msg} (using curated for ${NEGATIVE_TTL_MS / 1000}s)`)
     }
-  } catch (e) {
-    failedAt.set(cacheKey, Date.now())
-    // One concise line, no stack — network hiccups shouldn't spam the log.
-    const msg = (e as Error).message || String(e)
-    console.warn(`[vibe] listProviderModels ${provider}: ${msg} (using curated for ${NEGATIVE_TTL_MS / 1000}s)`)
-  }
-  return CURATED[provider] ?? []
+    return CURATED[provider] ?? []
+  })()
+  inflight.set(cacheKey, p)
+  try { return await p } finally { inflight.delete(cacheKey) }
 }
 
 async function fetchProviderModels(

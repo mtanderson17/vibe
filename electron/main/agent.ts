@@ -112,6 +112,19 @@ function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40) || 'task'
 }
 
+// Reject slugs that clearly echo the instruction or are too long/verbose to
+// be a real slug (weak models sometimes reply "the slug is: ..." or paraphrase
+// the prompt itself). A real slug is 2-5 hyphenated tokens.
+function looksLikeValidSlug(s: string): boolean {
+  if (!/^[a-z0-9-]+$/.test(s)) return false
+  const tokens = s.split('-').filter(Boolean)
+  if (tokens.length < 1 || tokens.length > 6) return false
+  // Reject if it contains obvious instruction-echo tokens
+  const bad = /\b(slug|lowercase|hyphen|word|output|format|example|task-description)\b/
+  if (bad.test(s)) return false
+  return true
+}
+
 function hasAnyProviderKey(cfg: ReturnType<typeof getConfig>): boolean {
   return !!(cfg.openrouterApiKey || cfg.anthropicApiKey || cfg.openaiApiKey || cfg.geminiApiKey || cfg.groqApiKey || cfg.xaiApiKey)
 }
@@ -128,11 +141,15 @@ async function generateSlug(cfg: ReturnType<typeof getConfig>, task: string): Pr
         xai: cfg.xaiApiKey
       },
       cfg.model,
-      'You turn task descriptions into concise git branch slugs. Output ONLY the slug, no explanation. Format: 2-5 lowercase words joined by hyphens. Examples: "add-pause", "fix-clear-lines-bug", "scaffold-api", "write-tests".',
+      'Emit a short git branch slug for the task. Slug format: 2-5 lowercase words joined by hyphens, no punctuation, no quotes. Reply with ONLY the slug on a single line — no preamble, no explanation. Example replies: add-pause | fix-clear-lines-bug | scaffold-api',
       task
     )
-    const cleaned = slugify(raw.trim())
-    if (cleaned.length >= 2 && cleaned.length <= 40) return cleaned
+    // Weak/free-tier models sometimes reply with "Sure! Here's the slug: ..."
+    // or echo the prompt. Take only the first line and strip common preambles.
+    const firstLine = raw.split(/\r?\n/).map(l => l.trim()).find(l => l.length > 0) ?? ''
+    const stripped = firstLine.replace(/^["'`]|["'`]$/g, '').replace(/^slug[:\s-]*/i, '')
+    const cleaned = slugify(stripped)
+    if (looksLikeValidSlug(cleaned)) return cleaned
   } catch { /* fall through to naive slug */ }
   return slugify(task)
 }
