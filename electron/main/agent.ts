@@ -1,7 +1,7 @@
 import type { WebContents } from 'electron'
 import type { AgentEvent, AgentState, Message } from './types'
 import { chatCompletion, shortCompletion } from './providers'
-import { executeTool, killAgentProcesses, TOOL_SCHEMAS } from './tools'
+import { executeTool, killAgentProcesses, allToolSchemas } from './tools'
 import { executeToolCalls, accumulateUsage, pinnedModelFor } from './tool-loop'
 import { createWorktree, commitAll } from './git'
 import { readContext, readAgentsGuide, readSummary } from './context'
@@ -180,7 +180,7 @@ async function runLoop(agent: AgentState): Promise<void> {
       },
         model: modelForCall,
         messages: agent.messages,
-        tools: TOOL_SCHEMAS as unknown as Array<Record<string, unknown>>,
+        tools: allToolSchemas(),
         signal: abort.signal,
         onDelta: (delta) => emit({ agentId: agent.id, type: 'stream_delta', data: delta })
       })

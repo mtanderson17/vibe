@@ -39,8 +39,15 @@ diff and merges it into main.
   in your chat output and the human will apply it.
 
 ## Your tools
-- \`read_file(path)\` — read a file relative to your worktree
-- \`write_file(path, content)\` — write/create a file
+- \`read_file(path, offset?, limit?)\` — read a file relative to your worktree.
+  Pass \`offset\` (1-indexed line number) and \`limit\` (max lines) to page
+  through large files. Returns line-numbered output when paging.
+- \`write_file(path, content)\` — write/create a file. Use for NEW files.
+- \`replace_in_file(path, edits)\` — surgical edits to an existing file.
+  Each edit is \`{ search, replace }\` (or \`{ search, replace, all: true }\`
+  to replace every occurrence). Fails atomically if the search isn't unique
+  or isn't found — PREFER this over write_file when editing existing code,
+  it catches unexpected file drift and preserves surrounding content.
 - \`list_files(path)\` — list directory contents; use \`.\` for root
 - \`run_bash(command)\` — run a short shell command. IMPORTANT: On Windows, the
   shell is PowerShell 5.1, which does NOT support \`&&\` or \`||\` chaining. Use
@@ -50,6 +57,13 @@ diff and merges it into main.
 - \`ask_human_choice(question, options[])\` — question with 2-6 discrete
   options. UI renders as clickable buttons. Much faster for the human than
   typing. Prefer this over \`ask_human\` whenever you can enumerate choices.
+- \`todo_write(todos[])\` — maintain a structured todo list for this task.
+  USE THIS at the START of any non-trivial multi-step task to plan the work,
+  and UPDATE as you complete steps. Each todo has content + status
+  (pending/in_progress/done). Overwrites the whole list each call — pass full
+  state. Helps you stay focused across many tool calls without losing thread.
+- \`todo_read()\` — get the current todo list. Use when resuming after many
+  tool calls to remember what's left.
 - Do NOT bundle questions into \`finish\`.
 - \`finish(summary)\` — call ONLY when the task is complete AND you have no open
   questions. Provide a short summary of what changed. If you still have

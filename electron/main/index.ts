@@ -33,6 +33,7 @@ import { bindApprovalSender, respondToApproval } from './approval'
 import { shutdownAllApps } from './launcher'
 import { listProviderModels } from './catalog'
 import { buildAppMenu } from './menu'
+import { connectMcpServers, disconnectAll as disconnectMcp } from './mcp'
 import { readSummary, writeSummary, summaryLastModified } from './context'
 import { readContext, writeContext } from './context'
 import { bindSender, startAgent, continueAgent, killAgent, listAgents, ensureAgent, getAgent, emit, hydrateAgentsFromWorkspace, spawnAgent, closeAgent, setAgentModel, setAgentName, markClosing, markClosed } from './agent'
@@ -61,6 +62,8 @@ async function createWindow(): Promise<void> {
   const cfg = getConfig()
   if (cfg.workspacePath) {
     await hydrateAgentsFromWorkspace(cfg.workspacePath).catch(err => console.error('[vibe] hydrate failed', err))
+    // Connect any configured MCP servers in the background — don't block window creation.
+    connectMcpServers(cfg.workspacePath).catch(err => console.error('[vibe] MCP connect failed', err))
   }
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -81,11 +84,13 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   shutdownAllApps()
+  disconnectMcp().catch(() => {})
   if (process.platform !== 'darwin') app.quit()
 })
 
 app.on('before-quit', () => {
   shutdownAllApps()
+  disconnectMcp().catch(() => {})
 })
 
 function registerIpc(): void {
@@ -207,6 +212,7 @@ function registerIpc(): void {
     pushRecentWorkspace(target)
     await ensureRepo(target).catch(err => console.error('[vibe] ensureRepo failed', err))
     await hydrateAgentsFromWorkspace(target).catch(err => console.error('[vibe] hydrate failed', err))
+    connectMcpServers(target).catch(err => console.error('[vibe] MCP connect failed', err))
     if (mainWindow) buildAppMenu(mainWindow)  // rebuild so File > Open Recent reflects new MRU
     mainWindow?.webContents.send('workspace:switched', target)
     return target

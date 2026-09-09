@@ -162,9 +162,18 @@ export async function chatCompletion(opts: ChatCompletionOptions): Promise<Compl
 }
 
 async function callOne(slug: string, opts: ChatCompletionOptions): Promise<CompletionResult> {
-  const { model: languageModel, slug: usedSlug } = resolveLanguageModel(slug, opts.keys)
+  const { model: languageModel, slug: usedSlug, label } = resolveLanguageModel(slug, opts.keys)
   const modelMessages = toModelMessages(opts.messages)
   const aiTools = toAiTools(opts.tools)
+
+  // Enable Anthropic's interleaved thinking for Claude models. This lets Claude
+  // do chain-of-thought before AND between tool calls — meaningful quality boost
+  // for multi-step tasks, especially with prompt caching (thinking blocks cache).
+  const providerOptions = label === 'Anthropic' ? {
+    anthropic: {
+      thinking: { type: 'enabled' as const, budgetTokens: 4000 }
+    }
+  } : undefined
 
   if (opts.onDelta) {
     const result = streamText({
@@ -172,7 +181,8 @@ async function callOne(slug: string, opts: ChatCompletionOptions): Promise<Compl
       messages: modelMessages,
       tools: aiTools,
       abortSignal: opts.signal,
-      maxOutputTokens: opts.maxTokens
+      maxOutputTokens: opts.maxTokens,
+      providerOptions
     })
     // Consume text stream for deltas
     for await (const chunk of result.textStream) {
@@ -202,7 +212,8 @@ async function callOne(slug: string, opts: ChatCompletionOptions): Promise<Compl
     messages: modelMessages,
     tools: aiTools,
     abortSignal: opts.signal,
-    maxOutputTokens: opts.maxTokens
+    maxOutputTokens: opts.maxTokens,
+    providerOptions
   })
   return {
     message: {
