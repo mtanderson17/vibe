@@ -11,6 +11,13 @@
     "test": "node --import tsx --test tests/**/*.test.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.50",
+    "@ai-sdk/google": "^4.0.65",
+    "@ai-sdk/groq": "^4.0.38",
+    "@ai-sdk/openai": "^4.0.62",
+    "@ai-sdk/xai": "^4.0.55",
+    "@openrouter/ai-sdk-provider": "^3.0.0",
+    "ai": "^7.0.94",
     "electron-store": "^8.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
