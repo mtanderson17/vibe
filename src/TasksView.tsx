@@ -256,9 +256,13 @@ export default function TasksView({ agentIds }: Props) {
                 placeholder="Ask PM: 'add a task for X', 'what's the current state?', 'regenerate summary'…"
                 disabled={pmState.status === 'running'}
               />
-              <button className="primary" onClick={sendToPm} disabled={!pmInput.trim() || pmState.status === 'running'}>
-                Send
-              </button>
+              {pmState.status === 'running' ? (
+                <button className="danger" onClick={() => window.vibe.pm.kill()}>Stop</button>
+              ) : (
+                <button className="primary" onClick={sendToPm} disabled={!pmInput.trim()}>
+                  Send
+                </button>
+              )}
               <button onClick={() => window.vibe.pm.clear()}>Clear chat</button>
             </div>
           </>

@@ -27,7 +27,7 @@ async function completeTasksForAgent(workspacePath: string, agentId: string): Pr
     }
   }
 }
-import { runPmAgent, getPmState, clearPmChat, bindPmSender } from './pmagent'
+import { runPmAgent, getPmState, clearPmChat, bindPmSender, killPmAgent } from './pmagent'
 import { readLedger, summarize } from './ledger'
 import { bindApprovalSender, respondToApproval } from './approval'
 import { shutdownAllApps } from './launcher'
@@ -111,6 +111,7 @@ function registerIpc(): void {
     return { ok: true }
   })
   ipcMain.handle('pm:clear', () => { clearPmChat(); return { ok: true } })
+  ipcMain.handle('pm:kill', () => killPmAgent())
   ipcMain.handle('pm:read_summary', async () => {
     const cfg = getConfig()
     if (!cfg.workspacePath) return ''

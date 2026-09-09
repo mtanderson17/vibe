@@ -112,6 +112,7 @@ declare global {
         state: () => Promise<{ status: 'idle' | 'running' | 'error'; lastRun: string | null; lastTrigger: 'merge' | 'manual' | 'chat' | null; messages: Message[]; error?: string; usage?: TokenUsage; pinnedModel?: string }>
         run: (trigger: 'manual' | 'chat', userInput?: string) => Promise<{ ok: boolean }>
         clear: () => Promise<{ ok: boolean }>
+        kill: () => Promise<{ ok: boolean; message: string }>
         readSummary: () => Promise<string>
         lastModified: () => Promise<string | null>
       }

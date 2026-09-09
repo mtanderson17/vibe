@@ -35,6 +35,8 @@ const state: PmState = {
   messages: []
 }
 
+let currentAbort: AbortController | null = null
+
 let sender: WebContents | null = null
 
 export function bindPmSender(webContents: WebContents): void { sender = webContents }
@@ -132,8 +134,8 @@ How to pick the command (INSPECT THE PROJECT FIRST via list_files):
 - Has package.json with "scripts.dev" or "scripts.start" → \`npm run dev\` or \`npm start\`
 - Has vite.config.* → \`npx vite\`
 - Has next.config.* → \`npx next dev\`
-- Static HTML site (index.html at root, no package.json / no build step) → \`npx --yes serve -l 8000 .\` OR \`python -m http.server 8000\`
-- Python: \`python main.py\` (or \`app.py\`, \`server.py\` — whichever exists)
+- Static HTML site (index.html at root, no package.json / no build step) → PREFER \`npx --yes serve -l 8000 .\` (works cross-platform without needing Python installed). Only use \`python -m http.server 8000\` if npx isn't available.
+- Python: \`python main.py\` (NEVER \`python3\` on Windows — that command silently invokes the Windows Store and exits 0 with no output. Always use \`python\`.)
 - Rust: \`cargo run\`
 - Go: \`go run .\`
 
@@ -301,6 +303,7 @@ Rules:
 - Check existing tasks before proposing — never propose duplicates.
 - Use ONLY the tools listed above. Do NOT invent tool names like \`exec\`, \`shell\`, \`bash\`, \`run\`, \`fetch\`, \`http\`. If you need to run a shell command, that's not available to you — describe what would need to run in your finish summary.
 - File paths for read_file/list_files are RELATIVE to the project root. Never use absolute paths (no leading /, no /workspace/, no C:\\).
+- When \`launch_app\` fails and you've tried the reasonable alternatives (or you've identified a real missing prerequisite — no package.json script, missing dependency, wrong port, etc.), call \`propose_task\` describing exactly what needs to be added or fixed so the app CAN be launched. Do NOT loop trying variations forever — 2–3 attempts is enough, then propose a task with the diagnosis. Include the exit code and error output you observed.
 
 Existing project context (human-owned, do not edit):
 ${projectContext}
@@ -312,7 +315,7 @@ Current tasks:
 ${tasksBrief}`
 }
 
-async function runPmLoop(workspace: string, model: string, kickoff: string, trigger: 'merge' | 'manual' | 'chat'): Promise<void> {
+async function runPmLoop(workspace: string, model: string, kickoff: string, trigger: 'merge' | 'manual' | 'chat', signal: AbortSignal): Promise<void> {
   const cfg = getConfig()
   const projectContext = await readContext(workspace).catch(() => '(no project context)')
   const currentSummary = await readSummary(workspace).catch(() => '(no summary yet)')
@@ -340,6 +343,7 @@ async function runPmLoop(workspace: string, model: string, kickoff: string, trig
   let updateSummaryWasCalled = false
 
   while (steps < MAX) {
+    if (signal.aborted) break
     steps++
     const { message, usage } = await chatCompletion({
       keys: {
@@ -352,7 +356,8 @@ async function runPmLoop(workspace: string, model: string, kickoff: string, trig
       },
       model: state.pinnedModel ?? model,
       messages,
-      tools: PM_TOOL_SCHEMAS as unknown as Array<Record<string, unknown>>
+      tools: PM_TOOL_SCHEMAS as unknown as Array<Record<string, unknown>>,
+      signal
     })
     messages.push(message)
     state.messages.push(message)
@@ -391,7 +396,8 @@ async function runPmLoop(workspace: string, model: string, kickoff: string, trig
       execute: (name, args) => {
         if (name === 'update_summary') updateSummaryWasCalled = true
         return executePmTool(workspace, name, args)
-      }
+      },
+      abortSignal: signal
     })
     messages.push(...result.messages)
     state.messages.push(...result.messages)
@@ -431,19 +437,45 @@ export async function runPmAgent(trigger: 'merge' | 'manual' | 'chat', userInput
     ? 'Regenerate the project summary based on the current state of the codebase.'
     : (userInput ?? 'Continue.')
 
+  const abort = new AbortController()
+  currentAbort = abort
+
   try {
     // Use PM-specific model if configured, else the global default
     const effectiveModel = (cfg.pmModel && cfg.pmModel.trim()) || cfg.model
-    await runPmLoop(cfg.workspacePath, effectiveModel, kickoff, trigger)
-    state.status = 'idle'
-    state.lastRun = new Date().toISOString()
+    await runPmLoop(cfg.workspacePath, effectiveModel, kickoff, trigger, abort.signal)
+    if (abort.signal.aborted) {
+      state.status = 'idle'
+      state.messages.push({ role: 'system', content: '[PM agent interrupted by user]' })
+      emit('message', state.messages[state.messages.length - 1])
+    } else {
+      state.status = 'idle'
+      state.lastRun = new Date().toISOString()
+    }
     emit('status', 'idle')
   } catch (e) {
-    state.status = 'error'
-    state.error = (e as Error).message
-    emit('error', state.error)
-    emit('status', 'error')
+    if (abort.signal.aborted) {
+      state.status = 'idle'
+      state.messages.push({ role: 'system', content: '[PM agent interrupted by user]' })
+      emit('message', state.messages[state.messages.length - 1])
+      emit('status', 'idle')
+    } else {
+      state.status = 'error'
+      state.error = (e as Error).message
+      emit('error', state.error)
+      emit('status', 'error')
+    }
+  } finally {
+    if (currentAbort === abort) currentAbort = null
   }
+}
+
+export function killPmAgent(): { ok: boolean; message: string } {
+  if (!currentAbort || state.status !== 'running') {
+    return { ok: false, message: 'PM agent is not running' }
+  }
+  currentAbort.abort()
+  return { ok: true, message: 'Interrupted' }
 }
 
 export function clearPmChat(): void {

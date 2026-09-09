@@ -74,9 +74,15 @@ export default function ContextView() {
           </button>
         )}
         {tab === 'summary' && (
-          <button className="primary" onClick={regenerate} disabled={pmStatus === 'running'}>
-            {pmStatus === 'running' ? 'Regenerating…' : pmStatus === 'error' ? 'Retry' : 'Regenerate now'}
-          </button>
+          pmStatus === 'running' ? (
+            <button className="danger" onClick={() => window.vibe.pm.kill()}>
+              Stop
+            </button>
+          ) : (
+            <button className="primary" onClick={regenerate}>
+              {pmStatus === 'error' ? 'Retry' : 'Regenerate now'}
+            </button>
+          )
         )}
       </div>
 

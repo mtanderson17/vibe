@@ -28,6 +28,7 @@ const api = {
     state: () => ipcRenderer.invoke('pm:state'),
     run: (trigger: 'manual' | 'chat', userInput?: string) => ipcRenderer.invoke('pm:run', trigger, userInput),
     clear: () => ipcRenderer.invoke('pm:clear'),
+    kill: () => ipcRenderer.invoke('pm:kill'),
     readSummary: () => ipcRenderer.invoke('pm:read_summary'),
     lastModified: () => ipcRenderer.invoke('pm:last_modified')
   },
