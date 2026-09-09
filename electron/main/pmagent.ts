@@ -126,7 +126,18 @@ const PM_TOOL_SCHEMAS = [
     type: 'function',
     function: {
       name: 'launch_app',
-      description: 'Launch a long-running process (dev server, build watcher, tests in watch mode). Spawns detached from the workspace root. Waits 1.5s to check the process actually started — if it exited within that window, returns an error with the startup output. If it stays running, returns pid + the first burst of output (useful to see the real port being bound). Use tail_app(pid) later to see more output.',
+      description: `Launch a long-running process (dev server, build watcher, tests in watch mode). Spawns detached from workspace root. Waits 1.5s — if it exited in that window, returns an error with startup output. If it stays running, returns pid + first output burst (useful to see the real port). Use tail_app(pid) later for more output.
+
+How to pick the command (INSPECT THE PROJECT FIRST via list_files):
+- Has package.json with "scripts.dev" or "scripts.start" → \`npm run dev\` or \`npm start\`
+- Has vite.config.* → \`npx vite\`
+- Has next.config.* → \`npx next dev\`
+- Static HTML site (index.html at root, no package.json / no build step) → \`npx --yes serve -l 8000 .\` OR \`python -m http.server 8000\`
+- Python: \`python main.py\` (or \`app.py\`, \`server.py\` — whichever exists)
+- Rust: \`cargo run\`
+- Go: \`go run .\`
+
+If the first attempt exits immediately, READ THE ERROR OUTPUT — it usually says what's missing (e.g. "npm: no such script: dev" means try a different command).`,
       parameters: {
         type: 'object',
         properties: {

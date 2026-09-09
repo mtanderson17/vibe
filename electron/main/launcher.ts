@@ -27,16 +27,17 @@ export interface LaunchedApp {
 
 // Wait `ms` for the process to either exit or produce output, then resolve.
 // Used to give the caller a real-ish signal about whether the process started ok.
-function waitEarly(child: ChildProcess, ms: number): Promise<{ exitedEarly: boolean; earlyOutput: string }> {
+function waitEarly(child: ChildProcess, ms: number): Promise<{ exitedEarly: boolean; earlyOutput: string; exitCode: number | null }> {
   return new Promise(resolve => {
     let earlyOutput = ''
     let exitedEarly = false
+    let exitCode: number | null = null
     let settled = false
-    const finish = () => { if (!settled) { settled = true; resolve({ exitedEarly, earlyOutput: earlyOutput.slice(-MAX_TAIL) }) } }
+    const finish = () => { if (!settled) { settled = true; resolve({ exitedEarly, earlyOutput: earlyOutput.slice(-MAX_TAIL), exitCode }) } }
     const onData = (buf: Buffer) => { earlyOutput += buf.toString('utf8'); if (earlyOutput.length > MAX_TAIL * 2) earlyOutput = earlyOutput.slice(-MAX_TAIL * 2) }
     child.stdout?.on('data', onData)
     child.stderr?.on('data', onData)
-    child.once('exit', () => { exitedEarly = true; finish() })
+    child.once('exit', (code) => { exitedEarly = true; exitCode = code; finish() })
     setTimeout(finish, ms)
   })
 }
@@ -73,10 +74,12 @@ export async function launchApp(command: string, cwd: string): Promise<LaunchedA
   child.on('exit', () => running.delete(pid))
   child.on('error', () => running.delete(pid))
 
-  const { exitedEarly, earlyOutput } = await waitEarly(child, 1500)
+  const { exitedEarly, earlyOutput, exitCode } = await waitEarly(child, 1500)
 
   if (exitedEarly) {
-    throw new Error(`Process exited within 1.5s — likely startup failure.\n${earlyOutput || '(no output)'}`)
+    const codeHint = exitCode !== null ? ` (exit code ${exitCode})` : ''
+    const output = earlyOutput.trim() || '(no output — process produced no stdout/stderr before exiting; the command may not exist, or PowerShell silently swallowed the error)'
+    throw new Error(`Command exited within 1.5s${codeHint}. Command was: ${command}\n--- output ---\n${output}`)
   }
 
   child.unref()
