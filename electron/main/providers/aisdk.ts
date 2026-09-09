@@ -75,7 +75,7 @@ export function resolveLanguageModel(slug: string, keys: ProviderKeys): { model:
 // Convert our Message[] to AI SDK ModelMessage[]. Handles assistant tool_calls
 // and tool result messages. System messages are NOT allowed in AI SDK's
 // messages array — extract them via extractSystem() first and pass separately.
-function toModelMessages(messages: Message[]): ModelMessage[] {
+export function toModelMessages(messages: Message[]): ModelMessage[] {
   const out: ModelMessage[] = []
   for (const m of messages) {
     if (m.role === 'system') {
@@ -113,7 +113,7 @@ function toModelMessages(messages: Message[]): ModelMessage[] {
 
 // Pull all system messages out into a single joined string. Preserves order.
 // Returns { system, rest } where `rest` has no system messages.
-function extractSystem(messages: Message[]): { system: string | undefined; rest: Message[] } {
+export function extractSystem(messages: Message[]): { system: string | undefined; rest: Message[] } {
   const systems: string[] = []
   const rest: Message[] = []
   for (const m of messages) {

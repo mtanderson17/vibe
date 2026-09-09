@@ -63,6 +63,8 @@ export interface CondenseOptions {
   tokenBudget?: number    // trigger threshold (default 60_000)
   keepRecent?: number     // preserve last K messages (default 20)
   maxSummaryTokens?: number
+  // Injectable summarizer for tests; defaults to shortCompletion().
+  summarize?: (systemPrompt: string, userPrompt: string, maxTokens: number) => Promise<string>
 }
 
 // Returns a NEW compacted messages array, or the original if no compaction was
@@ -85,12 +87,7 @@ export async function condenseIfNeeded(messages: Message[], opts: CondenseOption
   const compressed = messages.slice(preferredCutStart, cutEnd)
   const transcript = renderRange(compressed)
 
-  let summary: string
-  try {
-    summary = await shortCompletion(
-      opts.keys,
-      opts.model,
-      `You are a context summarizer for a coding agent. The agent has been working on a long task and its conversation history needs compaction. Summarize the following transcript into a dense, structured recap so the agent can continue seamlessly.
+  const summarizerSystemPrompt = `You are a context summarizer for a coding agent. The agent has been working on a long task and its conversation history needs compaction. Summarize the following transcript into a dense, structured recap so the agent can continue seamlessly.
 
 Include:
 - What has been ATTEMPTED and what the OUTCOMES were (successes, failures, errors)
@@ -99,10 +96,13 @@ Include:
 - Any USER FEEDBACK or corrections given
 - Current STATE / what to do next
 
-Be terse but concrete. Preserve exact file paths, function names, error messages. Use bullet points. Aim for 300-800 words.`,
-      transcript,
-      opts.maxSummaryTokens ?? 1500
-    )
+Be terse but concrete. Preserve exact file paths, function names, error messages. Use bullet points. Aim for 300-800 words.`
+  const maxTokens = opts.maxSummaryTokens ?? 1500
+  const summarize = opts.summarize ?? ((sys, user, mt) => shortCompletion(opts.keys, opts.model, sys, user, mt))
+
+  let summary: string
+  try {
+    summary = await summarize(summarizerSystemPrompt, transcript, maxTokens)
   } catch (e) {
     console.warn('[vibe] condenser failed to summarize, keeping original:', (e as Error).message)
     return { messages, compacted: false }
