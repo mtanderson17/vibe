@@ -368,15 +368,18 @@ function TaskCard({
       )}
       {!isProposed && (
         <div className="task-card-meta">
-          {task.assignedTo && (
-            <span>
-              <span
-                className={`status-dot status-${((agents as Record<string, { status?: string } | undefined>)[task.assignedTo])?.status ?? 'idle'}`}
-                style={{ marginRight: 4 }}
-              />
-              {task.assignedTo}
-            </span>
-          )}
+          {task.assignedTo && (() => {
+            const a = (agents as Record<string, { status?: string; displayName?: string } | undefined>)[task.assignedTo]
+            return (
+              <span>
+                <span
+                  className={`status-dot status-${a?.status ?? 'idle'}`}
+                  style={{ marginRight: 4 }}
+                />
+                {a?.displayName || task.assignedTo}
+              </span>
+            )
+          })()}
           {task.branch && <span style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--accent)' }}>{task.branch}</span>}
         </div>
       )}
@@ -399,9 +402,11 @@ function TaskCard({
               >
                 <option value="" disabled>Assign to…</option>
                 {agentIds.map(id => {
-                  const s = ((agents as Record<string, { status?: string } | undefined>)[id])?.status ?? 'idle'
+                  const a = (agents as Record<string, { status?: string; displayName?: string } | undefined>)[id]
+                  const s = a?.status ?? 'idle'
                   const busy = s === 'running' || s === 'awaiting_input' || s === 'awaiting_merge'
-                  return <option key={id} value={id} disabled={busy}>{id} {busy ? `(${s})` : ''}</option>
+                  const label = a?.displayName ? `${a.displayName} (${id})` : id
+                  return <option key={id} value={id} disabled={busy}>{label} {busy ? `· ${s}` : ''}</option>
                 })}
               </select>
             ) : (
