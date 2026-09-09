@@ -73,12 +73,15 @@ export function resolveLanguageModel(slug: string, keys: ProviderKeys): { model:
 }
 
 // Convert our Message[] to AI SDK ModelMessage[]. Handles assistant tool_calls
-// and tool result messages.
+// and tool result messages. System messages are NOT allowed in AI SDK's
+// messages array — extract them via extractSystem() first and pass separately.
 function toModelMessages(messages: Message[]): ModelMessage[] {
   const out: ModelMessage[] = []
   for (const m of messages) {
     if (m.role === 'system') {
-      out.push({ role: 'system', content: m.content ?? '' })
+      // System messages should already have been pulled by extractSystem().
+      // If we still see one here, inline it as a user message so context isn't lost.
+      out.push({ role: 'user', content: `[system]\n${m.content ?? ''}` })
     } else if (m.role === 'user') {
       out.push({ role: 'user', content: m.content ?? '' })
     } else if (m.role === 'assistant') {
@@ -106,6 +109,21 @@ function toModelMessages(messages: Message[]): ModelMessage[] {
     }
   }
   return out
+}
+
+// Pull all system messages out into a single joined string. Preserves order.
+// Returns { system, rest } where `rest` has no system messages.
+function extractSystem(messages: Message[]): { system: string | undefined; rest: Message[] } {
+  const systems: string[] = []
+  const rest: Message[] = []
+  for (const m of messages) {
+    if (m.role === 'system') {
+      if (m.content) systems.push(m.content)
+    } else {
+      rest.push(m)
+    }
+  }
+  return { system: systems.length ? systems.join('\n\n') : undefined, rest }
 }
 
 // Convert our OpenAI-format tool schemas to AI SDK's tool() format.
@@ -163,7 +181,8 @@ export async function chatCompletion(opts: ChatCompletionOptions): Promise<Compl
 
 async function callOne(slug: string, opts: ChatCompletionOptions): Promise<CompletionResult> {
   const { model: languageModel, slug: usedSlug, label } = resolveLanguageModel(slug, opts.keys)
-  const modelMessages = toModelMessages(opts.messages)
+  const { system, rest } = extractSystem(opts.messages)
+  const modelMessages = toModelMessages(rest)
   const aiTools = toAiTools(opts.tools)
 
   // Enable Anthropic's interleaved thinking for Claude models. This lets Claude
@@ -178,6 +197,7 @@ async function callOne(slug: string, opts: ChatCompletionOptions): Promise<Compl
   if (opts.onDelta) {
     const result = streamText({
       model: languageModel,
+      system,
       messages: modelMessages,
       tools: aiTools,
       abortSignal: opts.signal,
@@ -209,6 +229,7 @@ async function callOne(slug: string, opts: ChatCompletionOptions): Promise<Compl
 
   const result = await generateText({
     model: languageModel,
+    system,
     messages: modelMessages,
     tools: aiTools,
     abortSignal: opts.signal,
@@ -266,10 +287,8 @@ export async function shortCompletion(
   const { model: languageModel } = resolveLanguageModel(primary, keys)
   const result = await generateText({
     model: languageModel,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ],
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
     maxOutputTokens: maxTokens
   })
   return result.text
