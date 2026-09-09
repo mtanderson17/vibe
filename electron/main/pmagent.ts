@@ -128,18 +128,9 @@ const PM_TOOL_SCHEMAS = [
     type: 'function',
     function: {
       name: 'launch_app',
-      description: `Launch a long-running process (dev server, build watcher, tests in watch mode). Spawns detached from workspace root. Waits 1.5s — if it exited in that window, returns an error with startup output. If it stays running, returns pid + first output burst (useful to see the real port). Use tail_app(pid) later for more output.
+      description: `Launch a long-running process (dev server, build watcher, tests in watch mode). Spawns detached from workspace root in the platform's shell (PowerShell on Windows, bash on macOS/Linux). Waits 1.5s — if the process exits in that window, returns exit code + captured output. If it stays running, returns pid + first output burst.
 
-How to pick the command (INSPECT THE PROJECT FIRST via list_files):
-- Has package.json with "scripts.dev" or "scripts.start" → \`npm run dev\` or \`npm start\`
-- Has vite.config.* → \`npx vite\`
-- Has next.config.* → \`npx next dev\`
-- Static HTML site (index.html at root, no package.json / no build step) → PREFER \`npx --yes serve -l 8000 .\` (works cross-platform without needing Python installed). Only use \`python -m http.server 8000\` if npx isn't available.
-- Python: \`python main.py\` (NEVER \`python3\` on Windows — that command silently invokes the Windows Store and exits 0 with no output. Always use \`python\`.)
-- Rust: \`cargo run\`
-- Go: \`go run .\`
-
-If the first attempt exits immediately, READ THE ERROR OUTPUT — it usually says what's missing (e.g. "npm: no such script: dev" means try a different command).`,
+Before calling this, inspect the project (list_files, read README, read package.json, etc.) to figure out how it's supposed to be run — don't guess. If the first attempt fails, READ THE ERROR OUTPUT and adjust; if the output is empty, that's diagnostic too (may mean the binary wasn't on PATH, or the shell silently failed to resolve the command). Use tail_app(pid) later for more output from a running app.`,
       parameters: {
         type: 'object',
         properties: {
@@ -287,7 +278,13 @@ function buildPmSystemPrompt(projectContext: string, currentSummary: string, tas
     ? 'If the user asked a question you can just answer, call finish with the answer. If they asked you to change something (update summary, propose task, launch app), do that first, THEN call finish.'
     : `You MUST call \`update_summary\` at least once this run — even if changes since last summary are small, produce a fresh version that reflects the current state. Do NOT call \`finish\` before calling \`update_summary\`. If you truly have nothing to change, write the existing summary back verbatim so the file's timestamp updates and users see PM ran.`
 
+  const platform = process.platform === 'win32' ? 'Windows (shell: PowerShell 5.1)'
+    : process.platform === 'darwin' ? 'macOS (shell: bash)'
+    : `${process.platform} (shell: bash)`
+
   return `You are the Project Manager agent for a coding project managed via the Vibe IDE.
+
+Environment: ${platform}. When launching apps or suggesting shell commands, use syntax that works in this shell.
 
 Your job:
 - Maintain a concise, current project summary that other coding agents read at every turn
@@ -303,7 +300,7 @@ Rules:
 - Check existing tasks before proposing — never propose duplicates.
 - Use ONLY the tools listed above. Do NOT invent tool names like \`exec\`, \`shell\`, \`bash\`, \`run\`, \`fetch\`, \`http\`. If you need to run a shell command, that's not available to you — describe what would need to run in your finish summary.
 - File paths for read_file/list_files are RELATIVE to the project root. Never use absolute paths (no leading /, no /workspace/, no C:\\).
-- When \`launch_app\` fails and you've tried the reasonable alternatives (or you've identified a real missing prerequisite — no package.json script, missing dependency, wrong port, etc.), call \`propose_task\` describing exactly what needs to be added or fixed so the app CAN be launched. Do NOT loop trying variations forever — 2–3 attempts is enough, then propose a task with the diagnosis. Include the exit code and error output you observed.
+- If a tool keeps failing after 2–3 differently-informed attempts, stop retrying. Diagnose (read the actual error output, inspect the relevant project files) and either fix the root cause with your available tools or call \`propose_task\` describing the missing prerequisite. Do NOT loop trying variations.
 
 Existing project context (human-owned, do not edit):
 ${projectContext}
