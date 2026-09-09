@@ -10,6 +10,7 @@ import { saveAgent, loadAgents } from './persistence'
 import { siblingsSummary, buildSystemPrompt } from './agent-prompt'
 import { appendLedgerEntry, estimateCost } from './ledger'
 import { getPricing } from './pricing'
+import { condenseIfNeeded } from './condenser'
 
 const agents = new Map<string, AgentState>()
 const agentAborts = new Map<string, AbortController>()
@@ -167,6 +168,25 @@ async function runLoop(agent: AgentState): Promise<void> {
 
       // Priority: pinnedModel (from first served response) > per-agent override > global config
       const modelForCall = agent.pinnedModel ?? agent.modelOverride ?? cfg.model
+
+      // Condense (compact) long transcripts before sending. Preserves the
+      // cache-stable prefix (system + first user) so Anthropic prompt caching
+      // keeps working after compaction.
+      const condensed = await condenseIfNeeded(agent.messages, {
+        keys: {
+          openrouter: cfg.openrouterApiKey,
+          anthropic: cfg.anthropicApiKey,
+          openai: cfg.openaiApiKey,
+          gemini: cfg.geminiApiKey,
+          groq: cfg.groqApiKey,
+          xai: cfg.xaiApiKey
+        },
+        model: modelForCall
+      })
+      if (condensed.compacted) {
+        agent.messages = condensed.messages
+        emit({ agentId: agent.id, type: 'sync', data: agent })
+      }
 
       emit({ agentId: agent.id, type: 'stream_start', data: null })
       const { message, usage } = await chatCompletion({
