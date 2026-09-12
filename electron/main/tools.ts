@@ -285,9 +285,10 @@ export async function executeTool(
         }
       }
       return await new Promise<string>(resolve => {
+        const isWin = process.platform === 'win32'
         const child = execFile(
-          process.platform === 'win32' ? 'powershell' : 'bash',
-          process.platform === 'win32' ? ['-NoProfile', '-Command', command] : ['-lc', command],
+          isWin ? 'powershell' : (process.env.SHELL || 'bash'),
+          isWin ? ['-NoProfile', '-Command', command] : ['-lc', command],
           { cwd: worktreeRoot, windowsHide: true, maxBuffer: 5 * 1024 * 1024, timeout: 60_000 },
           (err, stdout, stderr) => {
             if (err) {

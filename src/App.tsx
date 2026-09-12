@@ -5,13 +5,15 @@ import Setup from './Setup'
 import AgentPanel from './AgentPanel'
 import ContextView from './ContextView'
 import CostView from './CostView'
+import FilesView from './FilesView'
 import TasksView from './TasksView'
 import ControlCenter from './ControlCenter'
 import Icon, { type IconName } from './Icon'
 import CommandPalette, { type Command } from './components/CommandPalette'
 import ShortcutsModal from './components/ShortcutsModal'
+import ErrorBoundary from './components/ErrorBoundary'
 
-type SidebarView = 'control' | 'tasks' | 'cost' | 'context' | 'settings'
+type SidebarView = 'control' | 'tasks' | 'files' | 'cost' | 'context' | 'settings'
 
 interface ApprovalReq {
   id: string
@@ -162,6 +164,7 @@ export default function App() {
     // Views
     cmds.push({ id: 'view.control', label: 'Go to Control Center', group: 'Navigate', run: () => { setSidebarView('control'); setFocusedAgent(null) } })
     cmds.push({ id: 'view.tasks',   label: 'Go to Tasks',          group: 'Navigate', run: () => { setSidebarView('tasks'); setFocusedAgent(null) } })
+    cmds.push({ id: 'view.files',   label: 'Go to Files',          group: 'Navigate', run: () => { setSidebarView('files'); setFocusedAgent(null) } })
     cmds.push({ id: 'view.cost',    label: 'Go to Cost',           group: 'Navigate', run: () => { setSidebarView('cost'); setFocusedAgent(null) } })
     cmds.push({ id: 'view.context', label: 'Go to Context',        group: 'Navigate', run: () => { setSidebarView('context'); setFocusedAgent(null) } })
     cmds.push({ id: 'view.settings', label: 'Open Settings',       group: 'Navigate', run: () => setSidebarView('settings') })
@@ -251,6 +254,7 @@ export default function App() {
         <div className="sidebar-nav">
           <SidebarItem icon="grid" label="Control Center" active={sidebarView === 'control'} onClick={() => { setSidebarView('control'); setFocusedAgent(null) }} />
           <SidebarItem icon="list" label="Tasks" active={sidebarView === 'tasks'} onClick={() => { setSidebarView('tasks'); setFocusedAgent(null) }} />
+          <SidebarItem icon="note" label="Files" active={sidebarView === 'files'} onClick={() => { setSidebarView('files'); setFocusedAgent(null) }} />
           <SidebarItem icon="coin" label="Cost" active={sidebarView === 'cost'} onClick={() => { setSidebarView('cost'); setFocusedAgent(null) }} />
           <SidebarItem icon="note" label="Context" active={sidebarView === 'context'} onClick={() => { setSidebarView('context'); setFocusedAgent(null) }} />
         </div>
@@ -300,7 +304,7 @@ export default function App() {
             </div>
             <div style={{ flex: 1, overflow: 'hidden' }}>
               {focusedAgent && agentSummaries[focusedAgent]
-                ? <AgentPanel agentId={focusedAgent} />
+                ? <AgentPanel key={focusedAgent} agentId={focusedAgent} />
                 : <ControlCenter
                     agentIds={agentIds}
                     onFocus={setFocusedAgent}
@@ -313,9 +317,10 @@ export default function App() {
             </div>
           </>
         )}
-        {sidebarView === 'tasks' && <TasksView agentIds={agentIds} />}
-        {sidebarView === 'cost' && <CostView />}
-        {sidebarView === 'context' && <ContextView />}
+        {sidebarView === 'tasks' && <ErrorBoundary label="Tasks"><TasksView agentIds={agentIds} /></ErrorBoundary>}
+        {sidebarView === 'files' && <ErrorBoundary label="Files"><FilesView /></ErrorBoundary>}
+        {sidebarView === 'cost' && <ErrorBoundary label="Cost"><CostView /></ErrorBoundary>}
+        {sidebarView === 'context' && <ErrorBoundary label="Context"><ContextView /></ErrorBoundary>}
       </main>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />

@@ -166,7 +166,7 @@ export default function AgentPanel({ agentId }: Props) {
             </div>
           </div>
           {diff && (
-            <div style={{ margin: '0 12px 12px' }}>
+            <div style={{ margin: '0 12px 12px', maxHeight: '60vh', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 4 }}>
               <DiffView files={diff.files} totalAdded={diff.totalAdded} totalRemoved={diff.totalRemoved} />
             </div>
           )}
@@ -251,40 +251,43 @@ export default function AgentPanel({ agentId }: Props) {
       </div>
 
       {(() => {
-        // System-marker triggered Continue banners (hit-limit / empty response).
+        // System-marker triggered Continue banners. The runtime stamps a typed
+        // `marker` field on system messages when the agent stops — the UI just
+        // switches on it (no content parsing).
         const lastMsg = agent.messages[agent.messages.length - 1]
-        const marker = agent.status === 'awaiting_input' && lastMsg?.role === 'system'
-          ? (lastMsg.content ?? '')
-          : ''
-        const hitLimit = marker.includes('Reached step limit')
-        const emptyResp = marker.includes('Model returned empty response')
-        if (hitLimit || emptyResp) {
+        const kind = agent.status === 'awaiting_input' ? lastMsg?.marker : undefined
+        const hitLimit = kind === 'hit_limit'
+        const emptyResp = kind === 'empty_response'
+        const stoppedNoTool = kind === 'stopped_no_tool'
+        if (hitLimit || emptyResp || stoppedNoTool) {
+          const title = hitLimit
+            ? `Agent paused after ${agent.maxSteps ?? '?'} steps`
+            : emptyResp
+            ? 'Model returned an empty response'
+            : 'Model stopped without calling a tool'
           const banner = hitLimit
-            ? 'Agent used its step budget. Continue with more runway, or send new instructions to redirect:'
-            : 'Model returned an empty response (common with weak free-tier models). Retry, or send guidance to redirect:'
+            ? 'It hit the configured step budget without calling finish. Continue to give it more runway, wrap it up now, or redirect below.'
+            : emptyResp
+            ? 'Common with weak free-tier models. Retry, or send guidance below.'
+            : 'It wrote a message but didn\'t call finish or another tool. Continue if there\'s more to do, wrap it up if it\'s done, or redirect below.'
           return (
-            <div className="composer choice-composer">
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, color: 'var(--fg-dim)', marginBottom: 8 }}>
-                  {banner}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div className="stop-banner">
+              <div className="stop-banner-title">{title}</div>
+              <div className="stop-banner-body">{banner}</div>
+              <div className="stop-banner-actions">
+                <button
+                  className="primary"
+                  onClick={() => window.vibe.agents.continue(agentId, hitLimit || stoppedNoTool ? 'Continue.' : 'Please respond — call a tool, ask a question via ask_human, or call finish if done.')}
+                >
+                  {emptyResp ? 'Retry' : 'Continue'}
+                </button>
+                {(hitLimit || stoppedNoTool) && (
                   <button
-                    className="primary"
-                    onClick={() => window.vibe.agents.continue(agentId, hitLimit ? 'Continue.' : 'Please respond — call a tool, ask a question via ask_human, or call finish if done.')}
-                    style={{ padding: '8px 14px' }}
+                    onClick={() => window.vibe.agents.continue(agentId, 'Wrap up. Summarize what you did and call finish.')}
                   >
-                    {hitLimit ? 'Continue' : 'Retry'}
+                    Wrap up &amp; finish
                   </button>
-                  {hitLimit && (
-                    <button
-                      onClick={() => window.vibe.agents.continue(agentId, 'Wrap up. Summarize what you did and call finish.')}
-                      style={{ padding: '8px 14px' }}
-                    >
-                      Wrap up &amp; finish
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
             </div>
           )

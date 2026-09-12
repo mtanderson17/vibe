@@ -1139,3 +1139,231 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); }
 .pm-chat { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .pm-composer { display: flex; gap: 6px; padding: 12px; border-top: 1px solid var(--border); }
 .pm-composer input { flex: 1; }
+
+/* --- Files view --- */
+.files-screen { padding: 0; }
+.files-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  height: 100%;
+  min-height: 0;
+}
+.files-tree-pane {
+  border-right: 1px solid var(--border);
+  background: var(--bg-2);
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.files-tree-header {
+  padding: 8px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg-2);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.files-tree-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  cursor: pointer;
+  padding: 2px 7px;
+  font-size: 11px;
+  border-radius: 3px;
+  line-height: 1;
+}
+.files-tree-btn:hover { color: var(--fg); background: var(--bg-hover); }
+.new-file-inline {
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-2);
+}
+.new-file-inline input {
+  width: 100%;
+  font-size: 12px;
+  padding: 4px 6px;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  color: var(--fg);
+  font-family: ui-monospace, monospace;
+}
+.new-file-hint {
+  font-size: 10px;
+  color: var(--fg-dim);
+  margin-top: 4px;
+}
+
+/* Context menu (right-click on file tree). Kept minimal — sized to content,
+   floats over everything, closes on outside click. */
+.context-menu {
+  position: fixed;
+  min-width: 180px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  padding: 4px 0;
+  z-index: 1000;
+  font-size: 12px;
+}
+.context-menu-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  color: var(--fg);
+  user-select: none;
+}
+.context-menu-item:hover:not(.disabled) { background: var(--bg-hover); }
+.context-menu-item.danger { color: var(--red); }
+.context-menu-item.disabled { color: var(--fg-dim); cursor: not-allowed; }
+
+/* Stop-reason banner: shown when an agent halts without calling finish.
+   Deliberately bigger/more prominent than the previous inline hint — users
+   were missing it. */
+.stop-banner {
+  margin: 12px;
+  padding: 14px 16px;
+  background: linear-gradient(0deg, rgba(136, 192, 208, 0.06), rgba(136, 192, 208, 0.06)), var(--bg-2);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+}
+.stop-banner-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+  margin-bottom: 4px;
+}
+.stop-banner-body {
+  font-size: 12px;
+  color: var(--fg-dim);
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+.stop-banner-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.stop-banner-actions button {
+  padding: 8px 14px;
+  font-size: 13px;
+}
+.file-tree { padding: 4px 0; font-size: 12px; }
+.file-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-tree-row:hover { background: var(--bg-hover); }
+.file-tree-row.active { background: var(--bg-3); color: var(--accent); }
+.file-tree-caret { width: 10px; display: inline-block; color: var(--fg-dim); font-size: 10px; }
+.file-tree-icon { display: inline-flex; opacity: 0.7; }
+.file-tree-name { overflow: hidden; text-overflow: ellipsis; }
+.file-tree-loading, .file-tree-error {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.file-tree-error { color: var(--red); }
+
+.files-editor-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--bg);
+}
+.editor-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  min-height: 32px;
+}
+.editor-tabs-empty {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.editor-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--bg-2);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+  max-width: 220px;
+  color: var(--fg-dim);
+}
+.editor-tab:hover { background: var(--bg-hover); color: var(--fg); }
+.editor-tab.active {
+  background: var(--bg);
+  color: var(--fg);
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 4px;
+}
+.editor-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+.editor-tab-dirty { color: var(--accent); font-size: 10px; }
+.editor-tab-close {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 14px;
+  opacity: 0.6;
+}
+.editor-tab-close:hover { opacity: 1; color: var(--red); }
+.editor-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.editor-body > section {  /* Monaco root */
+  flex: 1;
+  min-height: 0;
+}
+.editor-placeholder {
+  padding: 32px;
+  text-align: center;
+  color: var(--fg-dim);
+}
+.editor-save-error {
+  padding: 6px 12px;
+  background: rgba(220, 80, 80, 0.1);
+  border-bottom: 1px solid var(--red);
+  color: var(--red);
+  font-size: 11px;
+}
+.editor-truncation-banner {
+  padding: 6px 12px;
+  background: rgba(245, 197, 66, 0.08);
+  border-bottom: 1px solid rgba(245, 197, 66, 0.3);
+  color: var(--fg-dim);
+  font-size: 11px;
+}

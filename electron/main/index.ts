@@ -36,6 +36,7 @@ import { buildAppMenu } from './menu'
 import { connectMcpServers, disconnectAll as disconnectMcp } from './mcp'
 import { readSummary, writeSummary, summaryLastModified } from './context'
 import { readContext, writeContext } from './context'
+import { listDir, readWorkspaceFile, writeWorkspaceFile, mkdirWorkspace } from './files'
 import { bindSender, startAgent, continueAgent, killAgent, listAgents, ensureAgent, getAgent, emit, hydrateAgentsFromWorkspace, spawnAgent, closeAgent, setAgentModel, setAgentName, markClosing, markClosed } from './agent'
 import { deleteAgentFile, saveAgent } from './persistence'
 
@@ -239,6 +240,29 @@ function registerIpc(): void {
     const cfg = getConfig()
     if (!cfg.workspacePath) throw new Error('Workspace not set')
     await writeContext(cfg.workspacePath, content)
+  })
+
+  ipcMain.handle('files:list', async (_e, relPath: string) => {
+    const cfg = getConfig()
+    if (!cfg.workspacePath) throw new Error('Workspace not set')
+    return listDir(cfg.workspacePath, relPath || '.')
+  })
+  ipcMain.handle('files:read', async (_e, relPath: string) => {
+    const cfg = getConfig()
+    if (!cfg.workspacePath) throw new Error('Workspace not set')
+    return readWorkspaceFile(cfg.workspacePath, relPath)
+  })
+  ipcMain.handle('files:write', async (_e, relPath: string, content: string) => {
+    const cfg = getConfig()
+    if (!cfg.workspacePath) throw new Error('Workspace not set')
+    await writeWorkspaceFile(cfg.workspacePath, relPath, content)
+    return { ok: true }
+  })
+  ipcMain.handle('files:mkdir', async (_e, relPath: string) => {
+    const cfg = getConfig()
+    if (!cfg.workspacePath) throw new Error('Workspace not set')
+    await mkdirWorkspace(cfg.workspacePath, relPath)
+    return { ok: true }
   })
 
   ipcMain.handle('agents:list', () => listAgents())

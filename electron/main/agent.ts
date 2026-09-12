@@ -253,14 +253,21 @@ async function runLoop(agent: AgentState): Promise<void> {
       }
 
       if (!message.toolCalls || message.toolCalls.length === 0) {
-        // Model returned no tool calls. If it also returned no content, that's a
-        // model failure (common with weak free-tier models mid-turn). Surface it.
-        if (!message.content || !message.content.trim()) {
-          agent.messages.push({
-            role: 'system',
-            content: '[Model returned empty response — click Continue to retry, or send guidance to redirect.]'
-          })
-        }
+        // Model returned no tool calls. Always push a marker so the UI can show
+        // a Continue banner — otherwise the agent silently drops into
+        // awaiting_input with no explanation. Three cases:
+        //   - empty content (weak model / stream glitch)
+        //   - content but no tool call (model wrote a summary but forgot to call finish)
+        //   - hit step limit on a content-only turn
+        const hasContent = !!(message.content && message.content.trim())
+        const atLimit = steps >= cfg.maxSteps
+        const [content, kind] = atLimit
+          ? [`[Reached step limit (${cfg.maxSteps}). Click Continue to add another ${cfg.maxSteps} steps, or send a new instruction to redirect.]`, 'hit_limit' as const]
+          : hasContent
+          ? ['[Model stopped without calling a tool — click Continue to keep going, call finish if the task is done, or send a new instruction.]', 'stopped_no_tool' as const]
+          : ['[Model returned empty response — click Continue to retry, or send guidance to redirect.]', 'empty_response' as const]
+        agent.messages.push({ role: 'system', content, marker: kind })
+        if (atLimit) hitLimit = true
         stoppedForInput = true
         break
       }
@@ -300,10 +307,14 @@ async function runLoop(agent: AgentState): Promise<void> {
   } else {
     agent.status = 'awaiting_input'
     if (hitLimit) {
-      agent.messages.push({
-        role: 'system',
-        content: `[Reached step limit (${cfg.maxSteps}). Click Continue to add another ${cfg.maxSteps} steps, or send a new instruction to redirect.]`
-      })
+      const last = agent.messages[agent.messages.length - 1]
+      if (last?.marker !== 'hit_limit') {
+        agent.messages.push({
+          role: 'system',
+          content: `[Reached step limit (${cfg.maxSteps}). Click Continue to add another ${cfg.maxSteps} steps, or send a new instruction to redirect.]`,
+          marker: 'hit_limit'
+        })
+      }
     }
   }
 
@@ -331,8 +342,8 @@ export function killAgent(id: string): void {
   // Push the interrupted marker synchronously so the UI has final state instantly,
   // regardless of when the runLoop's own post-code finishes unwinding.
   const alreadyMarked = agent.messages[agent.messages.length - 1]
-  if (!(alreadyMarked && alreadyMarked.role === 'system' && (alreadyMarked.content ?? '').includes('interrupted'))) {
-    agent.messages.push({ role: 'system', content: '[Agent was interrupted by user]' })
+  if (alreadyMarked?.marker !== 'interrupted') {
+    agent.messages.push({ role: 'system', content: '[Agent was interrupted by user]', marker: 'interrupted' })
   }
 
   agent.status = 'awaiting_input'

@@ -47,8 +47,14 @@ function waitEarly(child: ChildProcess, ms: number): Promise<{ exitedEarly: bool
 // output to the caller; buffered locally so we don't fill disk.
 export async function launchApp(command: string, cwd: string): Promise<LaunchedApp> {
   const isWin = process.platform === 'win32'
-  const shell = isWin ? 'powershell.exe' : 'bash'
-  const args = isWin ? ['-NoProfile', '-Command', command] : ['-lc', command]
+  // Use cmd.exe (not powershell) on Windows for launch_app: PowerShell 5.1
+  // refuses to run bare `.bat`/`.cmd` filenames from cwd (only from PATH), so
+  // `launch.bat` silently exits 0 with no output. cmd.exe runs them naturally,
+  // and handles `python script.py`, `npm run dev` etc. equally well.
+  // Respect the user's shell on Unix ($SHELL is zsh on macOS Catalina+) so PATH,
+  // nvm, pyenv, brew shims etc. resolve the way the user's terminal would.
+  const shell = isWin ? 'cmd.exe' : (process.env.SHELL || 'bash')
+  const args = isWin ? ['/d', '/s', '/c', command] : ['-lc', command]
 
   const child = spawn(shell, args, {
     cwd,
@@ -78,7 +84,7 @@ export async function launchApp(command: string, cwd: string): Promise<LaunchedA
 
   if (exitedEarly) {
     const codeHint = exitCode !== null ? ` (exit code ${exitCode})` : ''
-    const output = earlyOutput.trim() || '(no output — process produced no stdout/stderr before exiting; the command may not exist, or PowerShell silently swallowed the error)'
+    const output = earlyOutput.trim() || '(no output — process produced no stdout/stderr before exiting; the command likely does not exist on PATH, or a launcher script exited immediately)'
     throw new Error(`Command exited within 1.5s${codeHint}. Command was: ${command}\n--- output ---\n${output}`)
   }
 

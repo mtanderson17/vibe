@@ -57,6 +57,7 @@ export default function CostView() {
         <button onClick={refresh}>Refresh</button>
       </div>
 
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
       {loading && <div style={{ padding: 20, opacity: 0.6 }}>Loading…</div>}
 
       {!loading && summary && summary.entryCount === 0 && (
@@ -135,6 +136,7 @@ export default function CostView() {
           )}
         </>
       )}
+      </div>
     </div>
   )
 }

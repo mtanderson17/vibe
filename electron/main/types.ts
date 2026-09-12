@@ -6,6 +6,11 @@ export interface ToolCall {
   arguments: Record<string, unknown>
 }
 
+// System messages pushed by the runtime to signal *why* the agent stopped.
+// The UI switches on this to render a corresponding banner (Continue, Retry,
+// etc.) — do NOT rely on parsing `content`, that's just human-visible text.
+export type SystemMarker = 'hit_limit' | 'empty_response' | 'stopped_no_tool' | 'interrupted'
+
 export interface Message {
   role: Role
   content: string | null
@@ -13,6 +18,7 @@ export interface Message {
   toolCallId?: string
   name?: string
   servedBy?: string
+  marker?: SystemMarker
 }
 
 export interface AgentEvent {

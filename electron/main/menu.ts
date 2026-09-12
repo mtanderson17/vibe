@@ -77,8 +77,9 @@ export function buildAppMenu(win: BrowserWindow): void {
       submenu: [
         { label: 'Control Center', accelerator: 'CommandOrControl+1', click: () => send('menu:view', 'control') },
         { label: 'Tasks',          accelerator: 'CommandOrControl+2', click: () => send('menu:view', 'tasks') },
-        { label: 'Cost',           accelerator: 'CommandOrControl+3', click: () => send('menu:view', 'cost') },
-        { label: 'Context',        accelerator: 'CommandOrControl+4', click: () => send('menu:view', 'context') },
+        { label: 'Files',          accelerator: 'CommandOrControl+3', click: () => send('menu:view', 'files') },
+        { label: 'Cost',           accelerator: 'CommandOrControl+4', click: () => send('menu:view', 'cost') },
+        { label: 'Context',        accelerator: 'CommandOrControl+5', click: () => send('menu:view', 'context') },
         { type: 'separator' },
         { role: 'reload' },
         { role: 'toggleDevTools' },

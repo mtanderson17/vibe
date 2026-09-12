@@ -24,10 +24,18 @@ const store = new Store<Config>({
     xaiApiKey: null,
     model: 'openrouter/free,minimax/minimax-m3:free',
     pmModel: null,
-    maxSteps: 25,
+    maxSteps: 100,
     agentCount: 4
   }
 })
+
+// One-time migration: users on the old 25-step default were hitting the limit
+// too often for it to be a helpful signal. Bump them to 100 unless they've
+// explicitly configured something higher. New installs get 100 from `defaults`.
+{
+  const cur = store.get('maxSteps')
+  if (typeof cur === 'number' && cur <= 25) store.set('maxSteps', 100)
+}
 
 // Read: decrypt any encrypted secret fields transparently.
 export function getConfig(): Config {

@@ -278,9 +278,10 @@ function buildPmSystemPrompt(projectContext: string, currentSummary: string, tas
     ? 'If the user asked a question you can just answer, call finish with the answer. If they asked you to change something (update summary, propose task, launch app), do that first, THEN call finish.'
     : `You MUST call \`update_summary\` at least once this run — even if changes since last summary are small, produce a fresh version that reflects the current state. Do NOT call \`finish\` before calling \`update_summary\`. If you truly have nothing to change, write the existing summary back verbatim so the file's timestamp updates and users see PM ran.`
 
+  const userShell = process.env.SHELL?.split(/[\\/]/).pop() || 'bash'
   const platform = process.platform === 'win32' ? 'Windows (shell: PowerShell 5.1)'
-    : process.platform === 'darwin' ? 'macOS (shell: bash)'
-    : `${process.platform} (shell: bash)`
+    : process.platform === 'darwin' ? `macOS (shell: ${userShell})`
+    : `${process.platform} (shell: ${userShell})`
 
   return `You are the Project Manager agent for a coding project managed via the Vibe IDE.
 
@@ -443,7 +444,7 @@ export async function runPmAgent(trigger: 'merge' | 'manual' | 'chat', userInput
     await runPmLoop(cfg.workspacePath, effectiveModel, kickoff, trigger, abort.signal)
     if (abort.signal.aborted) {
       state.status = 'idle'
-      state.messages.push({ role: 'system', content: '[PM agent interrupted by user]' })
+      state.messages.push({ role: 'system', content: '[PM agent interrupted by user]', marker: 'interrupted' })
       emit('message', state.messages[state.messages.length - 1])
     } else {
       state.status = 'idle'
@@ -453,7 +454,7 @@ export async function runPmAgent(trigger: 'merge' | 'manual' | 'chat', userInput
   } catch (e) {
     if (abort.signal.aborted) {
       state.status = 'idle'
-      state.messages.push({ role: 'system', content: '[PM agent interrupted by user]' })
+      state.messages.push({ role: 'system', content: '[PM agent interrupted by user]', marker: 'interrupted' })
       emit('message', state.messages[state.messages.length - 1])
       emit('status', 'idle')
     } else {

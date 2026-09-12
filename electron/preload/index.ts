@@ -73,6 +73,12 @@ const api = {
     read: () => ipcRenderer.invoke('context:read'),
     write: (content: string) => ipcRenderer.invoke('context:write', content)
   },
+  files: {
+    list: (relPath: string) => ipcRenderer.invoke('files:list', relPath),
+    read: (relPath: string) => ipcRenderer.invoke('files:read', relPath),
+    write: (relPath: string, content: string) => ipcRenderer.invoke('files:write', relPath, content),
+    mkdir: (relPath: string) => ipcRenderer.invoke('files:mkdir', relPath)
+  },
   agents: {
     list: () => ipcRenderer.invoke('agents:list'),
     get: (id: string) => ipcRenderer.invoke('agents:get', id),
