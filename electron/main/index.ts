@@ -58,6 +58,7 @@ async function createWindow(): Promise<void> {
     height: 900,
     backgroundColor: '#0e0c14',
     icon: appIconPath(),
+    autoHideMenuBar: false,  // menu is where users find Settings + shortcuts — keep visible
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,

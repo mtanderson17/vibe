@@ -32,6 +32,7 @@ export default function App() {
   const [approvals, setApprovals] = useState<ApprovalReq[]>([])
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined)
   const agentSummaries = useAgents(s => s.agents)
   const applyEvent = useAgents(s => s.applyEvent)
   const hydrate = useAgents(s => s.hydrate)
@@ -234,7 +235,11 @@ export default function App() {
   }
 
   if (sidebarView === 'settings') {
-    return <Setup config={config} onSaved={(c) => { setConfig(c); setSidebarView('control') }} />
+    return <Setup
+      config={config}
+      onSaved={(c) => { setConfig(c); setSidebarView('control'); setSettingsInitialTab(undefined) }}
+      initialTab={settingsInitialTab}
+    />
   }
 
   return (
@@ -322,7 +327,11 @@ export default function App() {
       </main>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
-      <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <ShortcutsModal
+        open={shortcutsOpen}
+        onClose={() => setShortcutsOpen(false)}
+        onEditKeybindings={() => { setSettingsInitialTab('keybindings'); setSidebarView('settings') }}
+      />
 
       {approvals.length > 0 && (
         <div className="approval-overlay">

@@ -25,7 +25,13 @@ const CATEGORY_LABELS: Record<string, string> = {
   help: 'Help'
 }
 
-export default function ShortcutsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+interface Props {
+  open: boolean
+  onClose: () => void
+  onEditKeybindings?: () => void
+}
+
+export default function ShortcutsModal({ open, onClose, onEditKeybindings }: Props) {
   const [bindings, setBindings] = useState<ResolvedKeybinding[]>([])
 
   useEffect(() => {
@@ -77,7 +83,11 @@ export default function ShortcutsModal({ open, onClose }: { open: boolean; onClo
           </div>
         </div>
         <div className="shortcuts-footer">
-          Customize these in Settings → Keybindings.
+          {onEditKeybindings ? (
+            <button onClick={() => { onClose(); onEditKeybindings() }} style={{ fontSize: 12, padding: '4px 12px' }}>
+              Edit keybindings…
+            </button>
+          ) : 'Customize these in Settings → Keybindings.'}
         </div>
       </div>
     </div>

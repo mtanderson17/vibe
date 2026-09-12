@@ -1282,6 +1282,32 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); }
 .kb-actions { display: flex; gap: 4px; }
 .kb-actions button { font-size: 11px; padding: 3px 8px; }
 
+/* --- Settings tabs --- */
+.settings-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 20px 0 20px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-dim);
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 0;
+  margin-bottom: -1px;
+}
+.settings-tab:hover { color: var(--fg); background: transparent; }
+.settings-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: transparent;
+}
+
 /* Stop-reason banner: shown when an agent halts without calling finish.
    Deliberately bigger/more prominent than the previous inline hint — users
    were missing it. */

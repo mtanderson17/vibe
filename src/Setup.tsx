@@ -6,7 +6,16 @@ import KeybindingsEditor from './components/KeybindingsEditor'
 interface Props {
   config: Config
   onSaved: (c: Config) => void
+  initialTab?: string  // e.g. 'keybindings' to land the user on that tab
 }
+
+type Tab = 'workspace' | 'model' | 'keys' | 'keybindings'
+const TABS: Array<{ id: Tab; label: string }> = [
+  { id: 'workspace',   label: 'Workspace' },
+  { id: 'model',       label: 'Models' },
+  { id: 'keys',        label: 'API Keys' },
+  { id: 'keybindings', label: 'Keybindings' }
+]
 
 interface OllamaState {
   available: boolean
@@ -81,7 +90,10 @@ const PROVIDERS: ProviderSpec[] = [
   }
 ]
 
-export default function Setup({ config, onSaved }: Props) {
+export default function Setup({ config, onSaved, initialTab }: Props) {
+  const [tab, setTab] = useState<Tab>(
+    TABS.some(t => t.id === initialTab) ? (initialTab as Tab) : 'workspace'
+  )
   const [keys, setKeys] = useState<Record<string, string>>({
     openrouterApiKey: config.openrouterApiKey ?? '',
     anthropicApiKey: config.anthropicApiKey ?? '',
@@ -154,7 +166,20 @@ export default function Setup({ config, onSaved }: Props) {
           </div>
         </header>
 
+        <div className="settings-tabs">
+          {TABS.map(t => (
+            <button
+              key={t.id}
+              className={`settings-tab ${tab === t.id ? 'active' : ''}`}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         {/* Workspace */}
+        {tab === 'workspace' && (
         <section className="settings-section">
           <div className="settings-section-title">Workspace</div>
           <div className="settings-section-body">
@@ -201,8 +226,10 @@ export default function Setup({ config, onSaved }: Props) {
             </div>
           </div>
         </section>
+        )}
 
         {/* Model */}
+        {tab === 'model' && (
         <section className="settings-section">
           <div className="settings-section-title">Default model chain</div>
           <div className="settings-section-body">
@@ -247,8 +274,10 @@ export default function Setup({ config, onSaved }: Props) {
             </div>
           </div>
         </section>
+        )}
 
         {/* API keys */}
+        {tab === 'keys' && (
         <section className="settings-section">
           <div className="settings-section-title">API keys</div>
           <div className="settings-section-body">
@@ -296,7 +325,9 @@ export default function Setup({ config, onSaved }: Props) {
             })}
           </div>
         </section>
+        )}
 
+        {tab === 'keybindings' && (
         <section className="settings-section">
           <div className="settings-section-title">Keybindings</div>
           <div className="settings-section-body">
@@ -306,6 +337,7 @@ export default function Setup({ config, onSaved }: Props) {
             <KeybindingsEditor />
           </div>
         </section>
+        )}
 
         <footer className="settings-footer">
           <div style={{ opacity: 0.7, fontSize: 12 }}>

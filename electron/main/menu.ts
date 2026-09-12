@@ -46,6 +46,13 @@ export function buildAppMenu(win: BrowserWindow): void {
           submenu: recentWorkspacesSubmenu(send)
         },
         { type: 'separator' },
+        // Settings near the top of File on Win/Linux so it's easy to find.
+        // On Mac, Settings lives under the app menu (standard convention),
+        // so we don't duplicate it here.
+        ...(isMac ? [] : [
+          { label: 'Settings…', accelerator: accel('settings'), click: () => send('menu:settings') } as MenuItemConstructorOptions,
+          { type: 'separator' as const }
+        ]),
         {
           label: 'New Agent',
           accelerator: accel('new-agent'),
@@ -56,9 +63,7 @@ export function buildAppMenu(win: BrowserWindow): void {
           accelerator: accel('close-agent'),
           click: () => send('menu:close-agent')
         },
-        { type: 'separator' },
         ...(isMac ? [] : [
-          { label: 'Settings…', accelerator: accel('settings'), click: () => send('menu:settings') } as MenuItemConstructorOptions,
           { type: 'separator' as const },
           { role: 'quit' as const }
         ])
