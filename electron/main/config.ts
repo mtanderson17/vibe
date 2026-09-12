@@ -30,11 +30,19 @@ const store = new Store<Config>({
 })
 
 // One-time migration: users on the old 25-step default were hitting the limit
-// too often for it to be a helpful signal. Bump them to 100 unless they've
-// explicitly configured something higher. New installs get 100 from `defaults`.
+// too often for it to be a helpful signal. Bump exactly-25 to 100. Users who
+// explicitly set something else (higher OR lower) keep their choice.
 {
   const cur = store.get('maxSteps')
-  if (typeof cur === 'number' && cur <= 25) store.set('maxSteps', 100)
+  const migrated = migrateMaxSteps(cur)
+  if (migrated !== cur) store.set('maxSteps', migrated as number)
+}
+
+// Pure migration helper — extracted for testing. Returns the value to persist,
+// or the input unchanged if no migration applies.
+export function migrateMaxSteps(current: number | undefined, oldDefault = 25, newDefault = 100): number | undefined {
+  if (current === oldDefault) return newDefault
+  return current
 }
 
 // Read: decrypt any encrypted secret fields transparently.

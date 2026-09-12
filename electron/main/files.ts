@@ -18,7 +18,7 @@ export interface FileEntry {
   size?: number       // only for files
 }
 
-function resolveInside(root: string, rel: string): string {
+export function resolveInside(root: string, rel: string): string {
   const clean = rel.replace(/^[/\\]+/, '')
   const abs = path.resolve(root, clean)
   if (abs !== root && !abs.startsWith(root + path.sep)) {
@@ -57,7 +57,7 @@ const MAX_READ_BYTES = 4 * 1024 * 1024  // 4 MB — Monaco struggles above this
 const BINARY_SNIFF_BYTES = 8000
 
 // Very rough: if the first 8kb contain a NUL byte, treat as binary.
-function looksBinary(buf: Buffer): boolean {
+export function looksBinary(buf: Buffer): boolean {
   const n = Math.min(buf.length, BINARY_SNIFF_BYTES)
   for (let i = 0; i < n; i++) if (buf[i] === 0) return true
   return false

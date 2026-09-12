@@ -2,10 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { useAgents } from './stores/agents'
 import MessageView from './components/MessageView'
 import FriendlyError from './components/FriendlyError'
-import ResolvedFileView, { type ResolvedFile } from './components/ResolvedFileView'
-import DiffView, { type FileDiff } from './components/DiffView'
 import AgentNameEditor from './components/AgentNameEditor'
 import ModelOverrideEditor from './components/ModelOverrideEditor'
+import MergePanel from './components/MergePanel'
 
 interface Props {
   agentId: string
@@ -24,22 +23,7 @@ export default function AgentPanel({ agentId }: Props) {
     messages: []
   }
   const [task, setTask] = useState('')
-  const [mergeResult, setMergeResult] = useState<{ ok: boolean; conflicts: string[]; output: string } | null>(null)
-  const [resolving, setResolving] = useState(false)
-  const [resolution, setResolution] = useState<{ files: ResolvedFile[]; servedBy?: string; error?: string } | null>(null)
-  const [overlap, setOverlap] = useState<{ own: string[]; overlaps: Record<string, string[]> } | null>(null)
-  const [diff, setDiff] = useState<{ files: FileDiff[]; totalAdded: number; totalRemoved: number } | null>(null)
-  const [loadingDiff, setLoadingDiff] = useState(false)
   const chatRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    // Check for sibling-agent file overlap when we're about to merge
-    if (agent.status === 'awaiting_merge') {
-      window.vibe.agents.checkOverlap(agentId).then(setOverlap)
-    } else {
-      setOverlap(null)
-    }
-  }, [agent.status, agentId])
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight
@@ -51,55 +35,12 @@ export default function AgentPanel({ agentId }: Props) {
 
   async function submit() {
     if (!task.trim()) return
-    setMergeResult(null)
     if (isFollowUp) {
       await window.vibe.agents.continue(agentId, task.trim())
     } else {
       await window.vibe.agents.start(agentId, task.trim())
     }
     setTask('')
-  }
-
-  async function merge() {
-    setResolution(null)
-    setDiff(null)
-    const result = await window.vibe.agents.merge(agentId)
-    setMergeResult(result)
-  }
-
-  async function previewDiff() {
-    if (diff) { setDiff(null); return }  // toggle
-    setLoadingDiff(true)
-    try {
-      const d = await window.vibe.agents.previewDiff(agentId)
-      setDiff(d)
-    } finally {
-      setLoadingDiff(false)
-    }
-  }
-
-  async function resolveWithAI() {
-    if (!mergeResult || mergeResult.ok) return
-    setResolving(true)
-    try {
-      const r = await window.vibe.agents.resolveConflicts(agentId, mergeResult.conflicts)
-      setResolution(r)
-    } finally {
-      setResolving(false)
-    }
-  }
-
-  async function acceptResolution() {
-    if (!resolution) return
-    await window.vibe.agents.acceptResolution(agentId, resolution.files)
-    setResolution(null)
-    setMergeResult({ ok: true, conflicts: [], output: 'Merged with AI-resolved conflicts' })
-  }
-
-  async function rejectResolution() {
-    await window.vibe.agents.abortMerge()
-    setResolution(null)
-    setMergeResult(null)
   }
 
   return (
@@ -141,84 +82,7 @@ export default function AgentPanel({ agentId }: Props) {
         )}
       </div>
 
-      {agent.status === 'awaiting_merge' && (
-        <>
-          <div className={`merge-banner ${overlap && Object.keys(overlap.overlaps).length > 0 ? 'conflict' : ''}`}>
-            <div className="msg-text">
-              <div>Agent finished. Ready to merge <code>{agent.branch}</code> into main?</div>
-              {overlap && Object.keys(overlap.overlaps).length > 0 && (
-                <div style={{ marginTop: 8, fontSize: 12 }}>
-                  <div style={{ fontWeight: 600, color: 'var(--yellow)' }}>⚠ Overlaps with sibling agents:</div>
-                  {Object.entries(overlap.overlaps).map(([sib, files]) => (
-                    <div key={sib} style={{ marginTop: 4, fontFamily: 'monospace', fontSize: 11 }}>
-                      <span style={{ color: 'var(--accent)' }}>{sib}</span> also modified: {files.join(', ')}
-                    </div>
-                  ))}
-                  <div style={{ marginTop: 4, opacity: 0.8 }}>Merge conflicts are likely — you can still proceed.</div>
-                </div>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={previewDiff} disabled={loadingDiff}>
-                {loadingDiff ? 'Loading…' : diff ? 'Hide diff' : 'Preview diff'}
-              </button>
-              <button className="primary" onClick={merge}>Merge</button>
-            </div>
-          </div>
-          {diff && (
-            <div style={{ margin: '0 12px 12px', maxHeight: '60vh', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 4 }}>
-              <DiffView files={diff.files} totalAdded={diff.totalAdded} totalRemoved={diff.totalRemoved} />
-            </div>
-          )}
-        </>
-      )}
-
-      {mergeResult && !resolution && (
-        <div className={`merge-banner ${mergeResult.ok ? '' : 'conflict'}`}>
-          <div className="msg-text" style={{ whiteSpace: 'pre-wrap', fontFamily: mergeResult.ok ? 'inherit' : 'monospace', fontSize: 11 }}>
-            {mergeResult.ok
-              ? '✓ Merged successfully'
-              : `Merge conflicts:\n${mergeResult.conflicts.join('\n')}`}
-          </div>
-          {!mergeResult.ok && (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="primary" onClick={resolveWithAI} disabled={resolving}>
-                {resolving ? 'Resolving…' : 'Resolve with AI'}
-              </button>
-              <button onClick={async () => { await window.vibe.agents.abortMerge(); setMergeResult(null) }}>
-                Abort
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {resolution && (
-        <div className="resolution-view">
-          {resolution.error ? (
-            <div className="merge-banner conflict">
-              <div className="msg-text">Resolution failed: {resolution.error}</div>
-              <button onClick={rejectResolution}>Abort merge</button>
-            </div>
-          ) : (
-            <>
-              <div className="resolution-header">
-                <div>
-                  <strong>AI resolved {resolution.files.filter(f => f.resolved).length} of {resolution.files.length} files</strong>
-                  {resolution.servedBy && <span style={{ opacity: 0.7, marginLeft: 8 }}>via {resolution.servedBy}</span>}
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="primary" onClick={acceptResolution}>Accept &amp; commit</button>
-                  <button onClick={rejectResolution}>Abort merge</button>
-                </div>
-              </div>
-              <div className="resolution-files">
-                {resolution.files.map(f => <ResolvedFileView key={f.path} file={f} />)}
-              </div>
-            </>
-          )}
-        </div>
-      )}
+      <MergePanel agentId={agentId} branch={agent.branch} status={agent.status} />
 
       {agent.error && (
         <div className="merge-banner conflict">
