@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Config } from './types'
 import ModelChainPicker from './components/ModelChainPicker'
+import KeybindingsEditor from './components/KeybindingsEditor'
 
 interface Props {
   config: Config
@@ -293,6 +294,16 @@ export default function Setup({ config, onSaved }: Props) {
                 </div>
               )
             })}
+          </div>
+        </section>
+
+        <section className="settings-section">
+          <div className="settings-section-title">Keybindings</div>
+          <div className="settings-section-body">
+            <div style={{ fontSize: 12, color: 'var(--fg-dim)', marginBottom: 12 }}>
+              Click <strong>Rebind</strong>, then press the target key combination. Changes save immediately and update the app menu.
+            </div>
+            <KeybindingsEditor />
           </div>
         </section>
 

@@ -60,22 +60,9 @@ export default function App() {
     return off
   }, [])
 
-  // Cmd+K to open the command palette; Cmd+/ shortcuts help.
-  // Other shortcuts are wired via the app menu (see menu.ts) which delivers via onMenuCommand.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault()
-        setPaletteOpen(prev => !prev)
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
-        e.preventDefault()
-        setShortcutsOpen(prev => !prev)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  // All keybindings are wired via the app menu (see menu.ts + keybindings.ts).
+  // The menu delivers each command as an IPC message the renderer handles in
+  // onMenuCommand below. This means user overrides apply automatically.
 
   async function respondApproval(id: string, approved: boolean) {
     setApprovals(prev => prev.filter(a => a.id !== id))

@@ -1,5 +1,6 @@
 import { Menu, shell, type MenuItemConstructorOptions, type BrowserWindow } from 'electron'
 import { getConfig } from './config'
+import { resolveAccelerator } from './keybindings'
 
 // Vibe application menu — replaces the default Electron menu with items that
 // actually do something in the app. Every menu item that maps to an in-app
@@ -7,10 +8,13 @@ import { getConfig } from './config'
 
 export function buildAppMenu(win: BrowserWindow): void {
   const isMac = process.platform === 'darwin'
+  const overrides = getConfig().keybindings
 
   function send(channel: string, ...args: unknown[]): void {
     win.webContents.send(channel, ...args)
   }
+  // Sugar: pull the current accelerator for a keybinding id (respects overrides).
+  const accel = (id: string) => resolveAccelerator(id, overrides)
 
   const template: MenuItemConstructorOptions[] = [
     ...(isMac ? [{
@@ -18,7 +22,7 @@ export function buildAppMenu(win: BrowserWindow): void {
       submenu: [
         { role: 'about' as const },
         { type: 'separator' as const },
-        { label: 'Settings…', accelerator: 'Cmd+,', click: () => send('menu:settings') },
+        { label: 'Settings…', accelerator: accel('settings'), click: () => send('menu:settings') },
         { type: 'separator' as const },
         { role: 'services' as const },
         { type: 'separator' as const },
@@ -34,7 +38,7 @@ export function buildAppMenu(win: BrowserWindow): void {
       submenu: [
         {
           label: 'Open Project…',
-          accelerator: 'CommandOrControl+O',
+          accelerator: accel('open-project'),
           click: () => send('menu:open-project')
         },
         {
@@ -44,17 +48,17 @@ export function buildAppMenu(win: BrowserWindow): void {
         { type: 'separator' },
         {
           label: 'New Agent',
-          accelerator: 'CommandOrControl+T',
+          accelerator: accel('new-agent'),
           click: () => send('menu:new-agent')
         },
         {
           label: 'Close Agent',
-          accelerator: 'CommandOrControl+W',
+          accelerator: accel('close-agent'),
           click: () => send('menu:close-agent')
         },
         { type: 'separator' },
         ...(isMac ? [] : [
-          { label: 'Settings…', accelerator: 'Ctrl+,', click: () => send('menu:settings') } as MenuItemConstructorOptions,
+          { label: 'Settings…', accelerator: accel('settings'), click: () => send('menu:settings') } as MenuItemConstructorOptions,
           { type: 'separator' as const },
           { role: 'quit' as const }
         ])
@@ -75,11 +79,11 @@ export function buildAppMenu(win: BrowserWindow): void {
     {
       label: 'View',
       submenu: [
-        { label: 'Control Center', accelerator: 'CommandOrControl+1', click: () => send('menu:view', 'control') },
-        { label: 'Tasks',          accelerator: 'CommandOrControl+2', click: () => send('menu:view', 'tasks') },
-        { label: 'Files',          accelerator: 'CommandOrControl+3', click: () => send('menu:view', 'files') },
-        { label: 'Cost',           accelerator: 'CommandOrControl+4', click: () => send('menu:view', 'cost') },
-        { label: 'Context',        accelerator: 'CommandOrControl+5', click: () => send('menu:view', 'context') },
+        { label: 'Control Center', accelerator: accel('view-control'), click: () => send('menu:view', 'control') },
+        { label: 'Tasks',          accelerator: accel('view-tasks'),   click: () => send('menu:view', 'tasks') },
+        { label: 'Files',          accelerator: accel('view-files'),   click: () => send('menu:view', 'files') },
+        { label: 'Cost',           accelerator: accel('view-cost'),    click: () => send('menu:view', 'cost') },
+        { label: 'Context',        accelerator: accel('view-context'), click: () => send('menu:view', 'context') },
         { type: 'separator' },
         { role: 'reload' },
         { role: 'toggleDevTools' },
@@ -94,13 +98,13 @@ export function buildAppMenu(win: BrowserWindow): void {
     {
       label: 'Agent',
       submenu: [
-        { label: 'New Agent', accelerator: 'CommandOrControl+T', click: () => send('menu:new-agent') },
-        { label: 'Focus Next Agent', accelerator: 'CommandOrControl+]', click: () => send('menu:focus-next') },
-        { label: 'Focus Previous Agent', accelerator: 'CommandOrControl+[', click: () => send('menu:focus-prev') },
+        { label: 'New Agent', accelerator: accel('new-agent'), click: () => send('menu:new-agent') },
+        { label: 'Focus Next Agent', accelerator: accel('focus-next'), click: () => send('menu:focus-next') },
+        { label: 'Focus Previous Agent', accelerator: accel('focus-prev'), click: () => send('menu:focus-prev') },
         { type: 'separator' },
-        { label: 'Stop Current Agent', accelerator: 'CommandOrControl+.', click: () => send('menu:stop-current') },
+        { label: 'Stop Current Agent', accelerator: accel('stop-current'), click: () => send('menu:stop-current') },
         { type: 'separator' },
-        { label: 'Regenerate Project Summary', accelerator: 'CommandOrControl+Shift+R', click: () => send('menu:pm-regenerate') }
+        { label: 'Regenerate Project Summary', accelerator: accel('pm-regenerate'), click: () => send('menu:pm-regenerate') }
       ]
     },
     {
@@ -108,12 +112,12 @@ export function buildAppMenu(win: BrowserWindow): void {
       submenu: [
         {
           label: 'Keyboard Shortcuts',
-          accelerator: 'CommandOrControl+/',
+          accelerator: accel('shortcuts'),
           click: () => send('menu:shortcuts')
         },
         {
           label: 'Command Palette',
-          accelerator: 'CommandOrControl+K',
+          accelerator: accel('palette'),
           click: () => send('menu:palette')
         },
         { type: 'separator' },

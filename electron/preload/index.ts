@@ -79,6 +79,11 @@ const api = {
     write: (relPath: string, content: string) => ipcRenderer.invoke('files:write', relPath, content),
     mkdir: (relPath: string) => ipcRenderer.invoke('files:mkdir', relPath)
   },
+  keybindings: {
+    list: () => ipcRenderer.invoke('keybindings:list'),
+    set: (id: string, accelerator: string) => ipcRenderer.invoke('keybindings:set', id, accelerator),
+    reset: (id?: string) => ipcRenderer.invoke('keybindings:reset', id)
+  },
   agents: {
     list: () => ipcRenderer.invoke('agents:list'),
     get: (id: string) => ipcRenderer.invoke('agents:get', id),

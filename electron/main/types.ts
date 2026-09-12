@@ -64,4 +64,6 @@ export interface Config {
   pmModel: string | null
   maxSteps: number
   agentCount: number
+  // Per-keybinding-id overrides. Missing key = use default. Empty string = unbound.
+  keybindings: Record<string, string>
 }

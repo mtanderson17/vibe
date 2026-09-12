@@ -33,6 +33,7 @@ import { bindApprovalSender, respondToApproval } from './approval'
 import { shutdownAllApps } from './launcher'
 import { listProviderModels } from './catalog'
 import { buildAppMenu } from './menu'
+import { KEYBINDINGS, listResolvedBindings } from './keybindings'
 import { connectMcpServers, disconnectAll as disconnectMcp } from './mcp'
 import { readSummary, writeSummary, summaryLastModified } from './context'
 import { readContext, writeContext } from './context'
@@ -278,6 +279,33 @@ function registerIpc(): void {
     if (!cfg.workspacePath) throw new Error('Workspace not set')
     await mkdirWorkspace(cfg.workspacePath, relPath)
     return { ok: true }
+  })
+
+  // Keybindings
+  ipcMain.handle('keybindings:list', () => {
+    return listResolvedBindings(getConfig().keybindings)
+  })
+  ipcMain.handle('keybindings:set', (_e, id: string, accelerator: string) => {
+    const spec = KEYBINDINGS.find(k => k.id === id)
+    if (!spec) throw new Error(`Unknown keybinding: ${id}`)
+    const cur = getConfig().keybindings ?? {}
+    const next = { ...cur, [id]: accelerator }
+    setConfig({ keybindings: next })
+    if (mainWindow) buildAppMenu(mainWindow)  // rebuild so the new accelerator takes effect
+    return listResolvedBindings(next)
+  })
+  ipcMain.handle('keybindings:reset', (_e, id?: string) => {
+    const cur = getConfig().keybindings ?? {}
+    let next: Record<string, string>
+    if (id) {
+      next = { ...cur }
+      delete next[id]
+    } else {
+      next = {}  // reset all
+    }
+    setConfig({ keybindings: next })
+    if (mainWindow) buildAppMenu(mainWindow)
+    return listResolvedBindings(next)
   })
 
   ipcMain.handle('agents:list', () => listAgents())

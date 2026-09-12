@@ -25,7 +25,8 @@ const store = new Store<Config>({
     model: 'openrouter/free,minimax/minimax-m3:free',
     pmModel: null,
     maxSteps: 100,
-    agentCount: 4
+    agentCount: 4,
+    keybindings: {}
   }
 })
 
@@ -59,7 +60,8 @@ export function getConfig(): Config {
     model: store.get('model'),
     pmModel: store.get('pmModel') ?? null,
     maxSteps: store.get('maxSteps'),
-    agentCount: store.get('agentCount') ?? 4
+    agentCount: store.get('agentCount') ?? 4,
+    keybindings: store.get('keybindings') ?? {}
   }
 }
 

@@ -1239,6 +1239,49 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); }
 .context-menu-item.danger { color: var(--red); }
 .context-menu-item.disabled { color: var(--fg-dim); cursor: not-allowed; }
 
+/* --- Keybindings editor --- */
+.kb-group { margin-bottom: 18px; }
+.kb-group-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+  margin-bottom: 6px;
+}
+.kb-row {
+  display: grid;
+  grid-template-columns: 1fr 160px auto;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.kb-row:last-child { border-bottom: none; }
+.kb-label { color: var(--fg); }
+.kb-modified {
+  color: var(--accent);
+  margin-left: 6px;
+  font-size: 14px;
+}
+.kb-current { text-align: right; }
+.kb-accel {
+  font-family: ui-monospace, monospace;
+  background: var(--bg-3);
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 11px;
+  color: var(--fg);
+}
+.kb-listening {
+  color: var(--accent);
+  font-style: italic;
+  font-size: 11px;
+}
+.kb-actions { display: flex; gap: 4px; }
+.kb-actions button { font-size: 11px; padding: 3px 8px; }
+
 /* Stop-reason banner: shown when an agent halts without calling finish.
    Deliberately bigger/more prominent than the previous inline hint — users
    were missing it. */

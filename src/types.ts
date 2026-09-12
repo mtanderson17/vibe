@@ -65,6 +65,15 @@ export interface Config {
   pmModel: string | null
   maxSteps: number
   agentCount: number
+  keybindings: Record<string, string>
+}
+
+export interface ResolvedKeybinding {
+  id: string
+  label: string
+  category: 'navigate' | 'agent' | 'pm' | 'help' | 'file'
+  defaultAccelerator: string
+  current: string
 }
 
 export interface AgentEvent {
@@ -142,6 +151,11 @@ declare global {
         read: (relPath: string) => Promise<{ content: string; truncated: boolean; binary: boolean; size: number }>
         write: (relPath: string, content: string) => Promise<{ ok: boolean }>
         mkdir: (relPath: string) => Promise<{ ok: boolean }>
+      }
+      keybindings: {
+        list: () => Promise<ResolvedKeybinding[]>
+        set: (id: string, accelerator: string) => Promise<ResolvedKeybinding[]>
+        reset: (id?: string) => Promise<ResolvedKeybinding[]>
       }
       agents: {
         list: () => Promise<AgentState[]>
