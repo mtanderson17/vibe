@@ -1,11 +1,13 @@
-import { useEffect, useState, useMemo, memo, useCallback } from 'react'
+import { useEffect, useState, useMemo, memo, useCallback, lazy, Suspense } from 'react'
 import type { Config } from './types'
 import { useAgents } from './stores/agents'
 import Setup from './Setup'
 import AgentPanel from './AgentPanel'
 import ContextView from './ContextView'
 import CostView from './CostView'
-import FilesView from './FilesView'
+// Monaco is ~8 MB — lazy-load so it only downloads when the user opens Files.
+// Cuts cold-start significantly.
+const FilesView = lazy(() => import('./FilesView'))
 import TasksView from './TasksView'
 import ControlCenter from './ControlCenter'
 import Icon, { type IconName } from './Icon'
@@ -321,7 +323,13 @@ export default function App() {
           </>
         )}
         {sidebarView === 'tasks' && <ErrorBoundary label="Tasks"><TasksView agentIds={agentIds} /></ErrorBoundary>}
-        {sidebarView === 'files' && <ErrorBoundary label="Files"><FilesView /></ErrorBoundary>}
+        {sidebarView === 'files' && (
+          <ErrorBoundary label="Files">
+            <Suspense fallback={<div className="screen" style={{ padding: 24, color: 'var(--fg-dim)' }}>Loading editor…</div>}>
+              <FilesView />
+            </Suspense>
+          </ErrorBoundary>
+        )}
         {sidebarView === 'cost' && <ErrorBoundary label="Cost"><CostView /></ErrorBoundary>}
         {sidebarView === 'context' && <ErrorBoundary label="Context"><ContextView /></ErrorBoundary>}
       </main>

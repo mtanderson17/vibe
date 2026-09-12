@@ -1,22 +1,25 @@
 :root {
-  /* Palette — warmer, more considered dark theme */
-  --bg:         #0f1114;
-  --bg-2:       #15181d;
-  --bg-3:       #1c2027;
-  --bg-hover:   #232830;
+  /* Palette — dark theme with a subtle synthwave undertone. Darks carry a
+     faint purple bias, accent is lavender-magenta (not neon). Functional
+     colors (green/yellow/red) keep their semantic meaning and stay muted.
+     The magenta-heavy stuff belongs on the logo, not the whole UI. */
+  --bg:         #0e0c14;
+  --bg-2:       #14111d;
+  --bg-3:       #1c1828;
+  --bg-hover:   #241f34;
 
-  --border:     #262b33;
-  --border-2:   #303740;
+  --border:     #2a2438;
+  --border-2:   #352d47;
 
-  --fg:         #edeef1;
-  --fg-2:       #b8bec7;
-  --fg-dim:     #7d8593;
+  --fg:         #eee9f4;
+  --fg-2:       #b8b1c6;
+  --fg-dim:     #7d7590;
 
-  --accent:     #7c9cff;
-  --accent-2:   #a0b8ff;
+  --accent:     #b48cff;   /* lavender-magenta */
+  --accent-2:   #d0b0ff;
   --green:      #61d891;
   --yellow:     #f5c542;
-  --blue:       #6ba9ff;
+  --blue:       #6dd3ff;   /* nudged toward synthwave cyan */
   --red:        #f97575;
   --gray:       #6b7280;
 
@@ -78,7 +81,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 button.primary {
   background: var(--accent);
-  color: #0d0f14;
+  color: #14101d;
   border-color: var(--accent);
   font-weight: 600;
 }
@@ -110,7 +113,11 @@ input::placeholder, textarea::placeholder { color: var(--fg-dim); }
 
 .sidebar {
   width: 208px;
-  background: var(--bg-2);
+  /* Very subtle synthwave horizon: bg color at top, whisper of magenta at the
+     very bottom. Kept low-opacity so it registers as atmosphere, not decoration. */
+  background:
+    linear-gradient(180deg, transparent 0%, transparent 85%, rgba(180, 140, 255, 0.06) 100%),
+    var(--bg-2);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;

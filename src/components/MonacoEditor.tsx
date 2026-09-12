@@ -40,13 +40,13 @@ function installMonacoEnv() {
     inherit: true,
     rules: [],
     colors: {
-      'editor.background': '#0f1115',
-      'editor.foreground': '#d8dee9',
-      'editorLineNumber.foreground': '#4c566a',
-      'editorLineNumber.activeForeground': '#8898b0',
-      'editor.selectionBackground': '#2a3140',
-      'editorCursor.foreground': '#88c0d0',
-      'editor.lineHighlightBackground': '#151922'
+      'editor.background': '#0e0c14',
+      'editor.foreground': '#d8d3e0',
+      'editorLineNumber.foreground': '#4a4257',
+      'editorLineNumber.activeForeground': '#9d8cba',
+      'editor.selectionBackground': '#332745',
+      'editorCursor.foreground': '#b48cff',
+      'editor.lineHighlightBackground': '#161122'
     }
   })
 }

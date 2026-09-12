@@ -4,15 +4,20 @@
 
 The file in `logo-concepts/` is the original reference (raster). The concepts numbered 01–07 are earlier exploration and are kept for reference only — they aren't the brand.
 
-## Followups needed before we ship
+## Assets
 
-1. **App icons.** Electron needs `.icns` (macOS), `.ico` (Windows), and `.png` (Linux) at multiple sizes: 16, 32, 64, 128, 256, 512, 1024. The current raster is a scene, not a mark — it needs to be simplified for tiny sizes (below ~64px the "ibe" text becomes unreadable). Options:
-   - Crop to just the V (drops the wordmark) for the app-icon variant.
-   - Commission or vector-recreate a simplified glyph-only version for icons.
-2. **Vector version.** The raster works for splash / marketing / README hero, but for the in-app sidebar we want SVG so it stays crisp at any DPR. Two paths: hand-trace the V shape in SVG with a matching rainbow-striped extrusion, or accept raster and just ship multiple density-doubled PNGs (@1x, @2x, @3x).
-3. **Sidebar treatment.** Replace the current text-only "VIBE" in `src/App.tsx` (sidebar-brand) with the logo. Small size (~24px tall) so it doesn't dominate the sidebar.
-4. **Splash / setup screen hero.** Full logo shown once on first-run / setup.
-5. **README hero shot.** Full logo at the top of the project README.
+- `vibe-logo.webp` — full logo (scene). Used for README hero, sidebar brand, splash.
+- `icons/` — V-only crop for app icons. Sizes 16, 24, 32, 48, 64, 128, 256, 512, 1024 as PNG, plus `icon.ico` (Windows multi-res) and `icon.icns` (macOS multi-res).
+- Regenerate icons with `npm run build:icons` (edit `CROP` in `scripts/build-icons.mjs` if the source ever changes).
+
+## Followups
+
+1. ~~App icons~~ ✅ Done.
+2. ~~Sidebar~~ ✅ Done (`src/App.tsx` uses `vibe-logo.webp`).
+3. ~~README hero~~ ✅ Done.
+4. **Vector version** — raster works everywhere but for extra crispness on Hi-DPI we may want SVG. Two paths: hand-trace in SVG with matching rainbow extrusion, or accept raster + density-doubled PNGs. Not urgent.
+5. **Splash / setup screen hero** — full logo shown on first-run / setup screen. Pair with #74 onboarding polish.
+6. **Wire icons into electron-builder** — when packaging (#66) happens, point at `branding/icons/icon.ico`, `icon.icns`, and `icon.png` (Linux) in the electron-builder config.
 
 ## Palette (extracted from the chosen logo, for use in UI accents)
 
