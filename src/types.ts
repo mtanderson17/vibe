@@ -66,12 +66,13 @@ export interface Config {
   maxSteps: number
   agentCount: number
   keybindings: Record<string, string>
+  submitOnEnter: boolean
 }
 
 export interface ResolvedKeybinding {
   id: string
   label: string
-  category: 'navigate' | 'agent' | 'pm' | 'help' | 'file'
+  category: 'navigate' | 'agent' | 'pm' | 'help' | 'file' | 'task'
   defaultAccelerator: string
   current: string
 }

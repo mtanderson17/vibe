@@ -59,6 +59,11 @@ export function buildAppMenu(win: BrowserWindow): void {
           click: () => send('menu:new-agent')
         },
         {
+          label: 'New Task…',
+          accelerator: accel('new-task'),
+          click: () => send('menu:new-task')
+        },
+        {
           label: 'Close Agent',
           accelerator: accel('close-agent'),
           click: () => send('menu:close-agent')

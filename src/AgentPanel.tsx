@@ -5,6 +5,7 @@ import FriendlyError from './components/FriendlyError'
 import AgentNameEditor from './components/AgentNameEditor'
 import ModelOverrideEditor from './components/ModelOverrideEditor'
 import MergePanel from './components/MergePanel'
+import { useSubmitKey } from './stores/prefs'
 
 interface Props {
   agentId: string
@@ -24,6 +25,7 @@ export default function AgentPanel({ agentId }: Props) {
   }
   const [task, setTask] = useState('')
   const chatRef = useRef<HTMLDivElement>(null)
+  const submitKey = useSubmitKey()
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight
@@ -218,7 +220,7 @@ export default function AgentPanel({ agentId }: Props) {
           value={task}
           onChange={e => setTask(e.target.value)}
           onKeyDown={e => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            if (submitKey.isSubmit(e)) {
               e.preventDefault()
               if (canType) submit()
             }
@@ -227,9 +229,9 @@ export default function AgentPanel({ agentId }: Props) {
             agent.status === 'awaiting_merge'
               ? 'Merge below — or reply to keep working (this cancels the pending merge)'
               : isFollowUp
-                ? 'Reply to the agent… (Cmd/Ctrl+Enter to send)'
+                ? `Reply to the agent… (${submitKey.hint})`
                 : canType
-                  ? 'Describe the task… (Cmd/Ctrl+Enter to submit)'
+                  ? `Describe the task… (${submitKey.hint})`
                   : 'Agent is busy…'
           }
           disabled={!canType}

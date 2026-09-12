@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useAgents } from './stores/agents'
+import { useSubmitKey } from './stores/prefs'
 import type { Message } from './types'
 
 interface Props { agentIds: string[] }
@@ -38,6 +39,7 @@ export default function TasksView({ agentIds }: Props) {
   const [newTitle, setNewTitle] = useState('')
   const [newDescription, setNewDescription] = useState('')
   const [showDescription, setShowDescription] = useState(false)
+  const submitKey = useSubmitKey()
   const [assignPickerFor, setAssignPickerFor] = useState<string | null>(null)
   const [pmState, setPmState] = useState<PmState>({ status: 'idle', lastRun: null, messages: [] })
   const [pmInput, setPmInput] = useState('')
@@ -130,8 +132,8 @@ export default function TasksView({ agentIds }: Props) {
               value={newTitle}
               onChange={e => setNewTitle(e.target.value)}
               onKeyDown={e => {
-                if (e.key === 'Enter' && !showDescription) create()
-                if (e.key === 'Enter' && showDescription && (e.metaKey || e.ctrlKey)) create()
+                // Single-line input: always submit on plain Enter regardless of pref
+                if (e.key === 'Enter' && !e.shiftKey) create()
               }}
               onFocus={() => setShowDescription(true)}
               placeholder="New task title…"
@@ -144,10 +146,10 @@ export default function TasksView({ agentIds }: Props) {
               value={newDescription}
               onChange={e => setNewDescription(e.target.value)}
               onKeyDown={e => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) create()
+                if (submitKey.isSubmit(e)) { e.preventDefault(); create() }
                 if (e.key === 'Escape') { setShowDescription(false); setNewDescription('') }
               }}
-              placeholder="Optional description — this gets sent to the agent as part of the task (Cmd/Ctrl+Enter to submit, Esc to hide)"
+              placeholder={`Optional description — sent to the agent as part of the task (${submitKey.hint}, Esc to hide)`}
               rows={3}
               style={{ resize: 'vertical', fontSize: 12 }}
             />
@@ -294,6 +296,7 @@ function TaskCard({
   const [editing, setEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(task.title)
   const [editDesc, setEditDesc] = useState(task.description ?? '')
+  const submitKey = useSubmitKey()
 
   async function saveEdit() {
     if (!editTitle.trim()) return
@@ -322,7 +325,7 @@ function TaskCard({
           value={editTitle}
           onChange={e => setEditTitle(e.target.value)}
           onKeyDown={e => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) saveEdit()
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit() }
             if (e.key === 'Escape') cancelEdit()
           }}
           placeholder="Task title"
@@ -332,10 +335,10 @@ function TaskCard({
           value={editDesc}
           onChange={e => setEditDesc(e.target.value)}
           onKeyDown={e => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) saveEdit()
+            if (submitKey.isSubmit(e)) { e.preventDefault(); saveEdit() }
             if (e.key === 'Escape') cancelEdit()
           }}
-          placeholder="Optional description — sent to the agent as part of the task (Cmd/Ctrl+Enter to save, Esc to cancel)"
+          placeholder={`Optional description — sent to the agent as part of the task (${submitKey.hint}, Esc to cancel)`}
           rows={4}
           style={{ resize: 'vertical', fontSize: 12, marginBottom: 8 }}
         />

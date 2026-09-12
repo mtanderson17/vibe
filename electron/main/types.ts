@@ -66,4 +66,7 @@ export interface Config {
   agentCount: number
   // Per-keybinding-id overrides. Missing key = use default. Empty string = unbound.
   keybindings: Record<string, string>
+  // true = Enter submits (Shift+Enter for newline — chat-app style).
+  // false = Enter adds newline, Cmd/Ctrl+Enter submits (multi-line-editor style).
+  submitOnEnter: boolean
 }

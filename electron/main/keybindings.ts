@@ -7,7 +7,7 @@
 // Accelerators use Electron's format: "CommandOrControl+Shift+K", "Ctrl+/",
 // "Cmd+,". See https://www.electronjs.org/docs/latest/api/accelerator
 
-export type KeybindingCategory = 'navigate' | 'agent' | 'pm' | 'help' | 'file'
+export type KeybindingCategory = 'navigate' | 'agent' | 'pm' | 'help' | 'file' | 'task'
 
 export interface KeybindingSpec {
   id: string
@@ -38,6 +38,9 @@ export const KEYBINDINGS: KeybindingSpec[] = [
 
   // PM
   { id: 'pm-regenerate',  label: 'Regenerate project summary', category: 'pm', defaultAccelerator: 'CommandOrControl+Shift+R' },
+
+  // Tasks
+  { id: 'new-task',       label: 'New task…',            category: 'task',     defaultAccelerator: 'CommandOrControl+Shift+T' },
 
   // Help
   { id: 'palette',        label: 'Command palette',      category: 'help',     defaultAccelerator: 'CommandOrControl+K' },

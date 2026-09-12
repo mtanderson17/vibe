@@ -26,7 +26,8 @@ const store = new Store<Config>({
     pmModel: null,
     maxSteps: 100,
     agentCount: 4,
-    keybindings: {}
+    keybindings: {},
+    submitOnEnter: true
   }
 })
 
@@ -61,7 +62,8 @@ export function getConfig(): Config {
     pmModel: store.get('pmModel') ?? null,
     maxSteps: store.get('maxSteps'),
     agentCount: store.get('agentCount') ?? 4,
-    keybindings: store.get('keybindings') ?? {}
+    keybindings: store.get('keybindings') ?? {},
+    submitOnEnter: store.get('submitOnEnter') ?? true
   }
 }
 

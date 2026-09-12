@@ -14,6 +14,8 @@ import Icon, { type IconName } from './Icon'
 import CommandPalette, { type Command } from './components/CommandPalette'
 import ShortcutsModal from './components/ShortcutsModal'
 import ErrorBoundary from './components/ErrorBoundary'
+import NewTaskModal from './components/NewTaskModal'
+import { usePrefs } from './stores/prefs'
 import vibeLogo from './assets/vibe-logo.webp'
 
 type SidebarView = 'control' | 'tasks' | 'files' | 'cost' | 'context' | 'settings'
@@ -33,6 +35,7 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined)
+  const [newTaskOpen, setNewTaskOpen] = useState(false)
   const agentSummaries = useAgents(s => s.agents)
   const applyEvent = useAgents(s => s.applyEvent)
   const hydrate = useAgents(s => s.hydrate)
@@ -41,6 +44,14 @@ export default function App() {
 
   useEffect(() => {
     window.vibe.config.get().then(setConfig)
+    usePrefs.getState().load()
+  }, [])
+
+  // Preload the Files bundle (Monaco) after 3s of idle so the first click on
+  // the Files tab is instant. Runs once — no-op if user has already opened it.
+  useEffect(() => {
+    const t = setTimeout(() => { import('./FilesView').catch(() => {}) }, 3000)
+    return () => clearTimeout(t)
   }, [])
 
   useEffect(() => {
@@ -106,6 +117,7 @@ export default function App() {
     const off = window.vibe.onMenuCommand((channel, ...args) => {
       switch (channel) {
         case 'menu:new-agent':      handleSpawn(); break
+        case 'menu:new-task':       setNewTaskOpen(true); break
         case 'menu:close-agent':    if (focusedAgent) handleClose(focusedAgent); break
         case 'menu:settings':       setSidebarView('settings'); break
         case 'menu:view': {
@@ -192,6 +204,9 @@ export default function App() {
     if (!atAgentCap) {
       cmds.push({ id: 'spawn', label: 'New agent', group: 'Agents', run: handleSpawn })
     }
+
+    // Tasks
+    cmds.push({ id: 'task.new', label: 'New task…', group: 'Tasks', run: () => setNewTaskOpen(true) })
 
     // PM
     cmds.push({ id: 'pm.regenerate', label: 'Regenerate project summary (PM)', group: 'PM', run: () => { window.vibe.pm.run('manual') } })
@@ -331,6 +346,10 @@ export default function App() {
         open={shortcutsOpen}
         onClose={() => setShortcutsOpen(false)}
         onEditKeybindings={() => { setSettingsInitialTab('keybindings'); setSidebarView('settings') }}
+      />
+      <NewTaskModal
+        open={newTaskOpen}
+        onClose={() => setNewTaskOpen(false)}
       />
 
       {approvals.length > 0 && (

@@ -21,6 +21,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   file: 'File',
   navigate: 'Navigate',
   agent: 'Agents',
+  task: 'Tasks',
   pm: 'PM agent',
   help: 'Help'
 }

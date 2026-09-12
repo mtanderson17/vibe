@@ -47,7 +47,7 @@ const api = {
   },
   onMenuCommand: (cb: (channel: string, ...args: unknown[]) => void) => {
     const channels = [
-      'menu:new-agent', 'menu:close-agent', 'menu:settings',
+      'menu:new-agent', 'menu:new-task', 'menu:close-agent', 'menu:settings',
       'menu:view', 'menu:focus-next', 'menu:focus-prev',
       'menu:stop-current', 'menu:pm-regenerate',
       'menu:shortcuts', 'menu:palette', 'menu:open-project'
