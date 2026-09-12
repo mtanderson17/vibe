@@ -30,6 +30,12 @@ export default defineConfig({
     plugins: [react()],
     resolve: {
       alias: { '@': resolve(__dirname, 'src') }
+    },
+    // Force-include Monaco in Vite's dep pre-bundling. Big one-time cost on
+    // cold start (cached to node_modules/.vite/), but subsequent boots skip
+    // per-language module transforms and are much snappier.
+    optimizeDeps: {
+      include: ['monaco-editor', '@monaco-editor/react']
     }
   }
 })

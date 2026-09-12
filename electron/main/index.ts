@@ -42,11 +42,21 @@ import { deleteAgentFile, saveAgent } from './persistence'
 
 let mainWindow: BrowserWindow | null = null
 
+// Pick the right icon format per platform. Path resolves both in dev (running
+// from repo root) and packaged (icon.png is bundled as extraResource).
+function appIconPath(): string {
+  const iconDir = path.join(app.getAppPath(), 'branding/icons')
+  if (process.platform === 'win32') return path.join(iconDir, 'icon.ico')
+  if (process.platform === 'darwin') return path.join(iconDir, 'icon.icns')
+  return path.join(iconDir, 'icon-512.png')
+}
+
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    backgroundColor: '#0b0d10',
+    backgroundColor: '#0e0c14',
+    icon: appIconPath(),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -59,11 +69,12 @@ async function createWindow(): Promise<void> {
   bindApprovalSender(mainWindow.webContents)
   buildAppMenu(mainWindow)
 
-  // Hydrate persisted agents before renderer loads
+  // Kick off hydration + MCP connect in the BACKGROUND (do not block window
+  // paint). The renderer polls agents.list() on its own; when hydration
+  // finishes those calls will return the persisted state.
   const cfg = getConfig()
   if (cfg.workspacePath) {
-    await hydrateAgentsFromWorkspace(cfg.workspacePath).catch(err => console.error('[vibe] hydrate failed', err))
-    // Connect any configured MCP servers in the background — don't block window creation.
+    hydrateAgentsFromWorkspace(cfg.workspacePath).catch(err => console.error('[vibe] hydrate failed', err))
     connectMcpServers(cfg.workspacePath).catch(err => console.error('[vibe] MCP connect failed', err))
   }
 
@@ -85,6 +96,10 @@ process.on('unhandledRejection', (reason) => {
 })
 
 app.whenReady().then(() => {
+  // Windows: setting AppUserModelId makes the taskbar group correctly and
+  // pick up our icon (otherwise it inherits generic "Electron").
+  if (process.platform === 'win32') app.setAppUserModelId('com.vibe.app')
+
   registerIpc()
   createWindow()
 
