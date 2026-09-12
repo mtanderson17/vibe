@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <!-- CONCEPT 4: Memphis design
+       Solid block V with squiggles, zigzags, dots, and geometric confetti.
+       Think Saved By The Bell title cards, Ettore Sottsass, early 90s stationery. -->
+  <rect width="400" height="400" fill="#f4ecd6"/>
+
+  <!-- squiggle behind -->
+  <path d="M 40 130 Q 70 100 100 130 T 160 130 T 220 130"
+        fill="none" stroke="#111" stroke-width="4" stroke-linecap="round"/>
+  <path d="M 240 300 Q 270 270 300 300 T 360 300"
+        fill="none" stroke="#e0468a" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- dots -->
+  <circle cx="60"  cy="290" r="6" fill="#111"/>
+  <circle cx="80"  cy="310" r="6" fill="#111"/>
+  <circle cx="100" cy="290" r="6" fill="#111"/>
+  <circle cx="120" cy="310" r="6" fill="#111"/>
+  <circle cx="140" cy="290" r="6" fill="#111"/>
+
+  <!-- zigzag -->
+  <path d="M 250 60 L 265 80 L 280 60 L 295 80 L 310 60 L 325 80 L 340 60"
+        fill="none" stroke="#00a3a3" stroke-width="4"/>
+
+  <!-- little triangle -->
+  <polygon points="60,80 90,80 75,50" fill="#f5c542"/>
+
+  <!-- small solid square -->
+  <rect x="320" y="120" width="24" height="24" fill="#00a3a3" transform="rotate(20 332 132)"/>
+
+  <!-- MAIN V — thick solid block -->
+  <path d="M 90 100 L 195 310 L 205 310 L 310 100 L 258 100 L 200 230 L 142 100 Z"
+        fill="#111"/>
+
+  <!-- small pink accent shape inside/beside V -->
+  <circle cx="200" cy="260" r="14" fill="#e0468a"/>
+
+  <!-- wordmark -->
+  <text x="200" y="365" text-anchor="middle" font-family="'Impact', 'Arial Black', sans-serif"
+        font-weight="900" font-size="42" fill="#111" letter-spacing="4">VIBE</text>
+</svg>

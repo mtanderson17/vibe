@@ -12,6 +12,7 @@ import Icon, { type IconName } from './Icon'
 import CommandPalette, { type Command } from './components/CommandPalette'
 import ShortcutsModal from './components/ShortcutsModal'
 import ErrorBoundary from './components/ErrorBoundary'
+import vibeLogo from './assets/vibe-logo.webp'
 
 type SidebarView = 'control' | 'tasks' | 'files' | 'cost' | 'context' | 'settings'
 
@@ -250,7 +251,9 @@ export default function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="sidebar-brand">VIBE</div>
+        <div className="sidebar-brand">
+          <img src={vibeLogo} alt="Vibe" />
+        </div>
         <div className="sidebar-nav">
           <SidebarItem icon="grid" label="Control Center" active={sidebarView === 'control'} onClick={() => { setSidebarView('control'); setFocusedAgent(null) }} />
           <SidebarItem icon="list" label="Tasks" active={sidebarView === 'tasks'} onClick={() => { setSidebarView('tasks'); setFocusedAgent(null) }} />

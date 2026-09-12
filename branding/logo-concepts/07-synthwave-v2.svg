@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <!-- CONCEPT 7: Synthwave v2 — creative pass on v5.
+       Mirror-symmetric around x=200. V shape is v5's original (wide, chunky,
+       pointed bottom). Extrusion is a symmetric drop-shadow straight down
+       (no horizontal offset). Wordmark centered via tspan-dx so trailing
+       letter-spacing doesn't shift the visual center. -->
+  <defs>
+    <linearGradient id="sw2-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#03000f"/>
+      <stop offset="0.35" stop-color="#180040"/>
+      <stop offset="0.65" stop-color="#3a0080"/>
+      <stop offset="0.82" stop-color="#a11a90"/>
+      <stop offset="1"    stop-color="#ff8a3a"/>
+    </linearGradient>
+
+    <linearGradient id="sw2-sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#fff36a"/>
+      <stop offset="0.35" stop-color="#ffb03a"/>
+      <stop offset="0.7"  stop-color="#ff2fbf"/>
+      <stop offset="1"    stop-color="#8a1a80"/>
+    </linearGradient>
+
+    <!-- rainbow chrome for V face — warm top → chrome mid → cool bottom -->
+    <linearGradient id="sw2-face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#ff2fbf"/>
+      <stop offset="0.12" stop-color="#ff5a3a"/>
+      <stop offset="0.28" stop-color="#ffdb2f"/>
+      <stop offset="0.44" stop-color="#ffffff"/>
+      <stop offset="0.52" stop-color="#ffffff"/>
+      <stop offset="0.66" stop-color="#5cff8a"/>
+      <stop offset="0.82" stop-color="#00e5ff"/>
+      <stop offset="1"    stop-color="#a366ff"/>
+    </linearGradient>
+
+    <linearGradient id="sw2-word" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#ffffff"/>
+      <stop offset="0.45" stop-color="#c0c0c0"/>
+      <stop offset="0.55" stop-color="#5a5a5a"/>
+      <stop offset="1"    stop-color="#e0e0e0"/>
+    </linearGradient>
+
+    <filter id="sw2-glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="sw2-sunglow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="10"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Original v5 V: wide, chunky, pointed bottom. Vertices are symmetric around x=200. -->
+    <path id="sw2-v" d="M 60 80 L 128 80 L 200 232 L 272 80 L 340 80 L 200 340 Z"/>
+  </defs>
+
+  <!-- ==== sky ==== -->
+  <rect width="400" height="400" fill="url(#sw2-sky)"/>
+
+  <!-- ==== stars, mirrored around x=200 ==== -->
+  <g fill="#fff">
+    <circle cx="24"  cy="22" r="0.9"/> <circle cx="376" cy="22" r="0.9"/>
+    <circle cx="52"  cy="46" r="1"/>   <circle cx="348" cy="46" r="1"/>
+    <circle cx="86"  cy="16" r="1.2"/> <circle cx="314" cy="16" r="1.2"/>
+    <circle cx="118" cy="34" r="0.9"/> <circle cx="282" cy="34" r="0.9"/>
+    <circle cx="152" cy="52" r="1"/>   <circle cx="248" cy="52" r="1"/>
+    <circle cx="200" cy="18" r="1"/>
+    <circle cx="38"  cy="82" r="1"/>   <circle cx="362" cy="82" r="1"/>
+    <circle cx="92"  cy="102" r="0.9"/><circle cx="308" cy="102" r="0.9"/>
+    <circle cx="140" cy="118" r="0.9"/><circle cx="260" cy="118" r="0.9"/>
+  </g>
+  <g filter="url(#sw2-glow)" fill="#fff">
+    <circle cx="68"  cy="70"  r="1.8"/> <circle cx="332" cy="70"  r="1.8"/>
+    <circle cx="200" cy="52"  r="1.6"/>
+  </g>
+
+  <!-- ==== sun, centered ==== -->
+  <circle cx="200" cy="230" r="128" fill="url(#sw2-sun)" filter="url(#sw2-sunglow)"/>
+  <g fill="url(#sw2-sky)">
+    <rect x="80"  y="272" width="240" height="3"/>
+    <rect x="80"  y="280" width="240" height="3"/>
+    <rect x="80"  y="290" width="240" height="4"/>
+    <rect x="80"  y="302" width="240" height="4"/>
+    <rect x="80"  y="316" width="240" height="5"/>
+    <rect x="80"  y="332" width="240" height="6"/>
+  </g>
+
+  <!-- ==== horizon + grid, mirrored ==== -->
+  <line x1="0" y1="286" x2="400" y2="286"
+        stroke="#ff2fbf" stroke-width="2" filter="url(#sw2-glow)"/>
+  <g stroke="#00e5ff" stroke-width="1" fill="none">
+    <line x1="200" y1="286" x2="-260" y2="440" opacity="0.4"/>
+    <line x1="200" y1="286" x2="660"  y2="440" opacity="0.4"/>
+    <line x1="200" y1="286" x2="-140" y2="440" opacity="0.5"/>
+    <line x1="200" y1="286" x2="540"  y2="440" opacity="0.5"/>
+    <line x1="200" y1="286" x2="-40"  y2="440" opacity="0.6"/>
+    <line x1="200" y1="286" x2="440"  y2="440" opacity="0.6"/>
+    <line x1="200" y1="286" x2="30"   y2="440" opacity="0.75"/>
+    <line x1="200" y1="286" x2="370"  y2="440" opacity="0.75"/>
+    <line x1="200" y1="286" x2="90"   y2="440" opacity="0.85"/>
+    <line x1="200" y1="286" x2="310"  y2="440" opacity="0.85"/>
+    <line x1="200" y1="286" x2="150"  y2="440" opacity="0.9"/>
+    <line x1="200" y1="286" x2="250"  y2="440" opacity="0.9"/>
+    <line x1="200" y1="286" x2="200"  y2="440" opacity="0.9"/>
+    <line x1="0" y1="294" x2="400" y2="294" opacity="0.35"/>
+    <line x1="0" y1="304" x2="400" y2="304" opacity="0.45"/>
+    <line x1="0" y1="320" x2="400" y2="320" opacity="0.6"/>
+    <line x1="0" y1="344" x2="400" y2="344" opacity="0.75"/>
+    <line x1="0" y1="378" x2="400" y2="378" opacity="0.85"/>
+  </g>
+
+  <!-- speed streaks (mirrored) -->
+  <g stroke="#ffffff" stroke-width="0.8" opacity="0.25">
+    <line x1="200" y1="286" x2="20"  y2="70"/>
+    <line x1="200" y1="286" x2="380" y2="70"/>
+    <line x1="200" y1="286" x2="80"  y2="20"/>
+    <line x1="200" y1="286" x2="320" y2="20"/>
+  </g>
+
+  <!-- ==== THE V ====
+       Symmetric drop-shadow layers straight down (dx=0). Because the V's outer
+       edges taper toward the point, the shadow is visible on both outer arms
+       and below the point — fully symmetric. -->
+  <use href="#sw2-v" transform="translate(0, 14)" fill="#12002a"/>
+  <use href="#sw2-v" transform="translate(0, 10)" fill="#22003d"/>
+  <use href="#sw2-v" transform="translate(0, 6)"  fill="#3a005c"/>
+
+  <!-- neon halo -->
+  <use href="#sw2-v" fill="#ff2fbf" opacity="0.4" filter="url(#sw2-glow)"/>
+
+  <!-- main face -->
+  <use href="#sw2-v" fill="url(#sw2-face)" stroke="#ffffff" stroke-width="1.5"/>
+
+  <!-- mirrored specular highlights on both arms -->
+  <path d="M 74 90 L 122 90 L 200 232 L 190 246 L 82 106 Z"
+        fill="#ffffff" opacity="0.38"/>
+  <path d="M 326 90 L 278 90 L 200 232 L 210 246 L 318 106 Z"
+        fill="#ffffff" opacity="0.38"/>
+
+  <!-- ==== wordmark, genuinely centered ====
+       Using tspan-with-dx puts spacing BETWEEN letters only, not after the
+       last one. text-anchor="middle" then centers the visible glyphs
+       (not padded advance width) around x=200. -->
+  <text y="386" text-anchor="middle"
+        font-family="'Impact', 'Arial Black', sans-serif"
+        font-weight="900" font-size="30" fill="url(#sw2-word)"
+        stroke="#00e5ff" stroke-width="0.5"
+        filter="url(#sw2-glow)">
+    <tspan x="200">V<tspan dx="14">I</tspan><tspan dx="14">B</tspan><tspan dx="14">E</tspan></tspan>
+  </text>
+</svg>

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="branding/vibe-logo.webp" alt="Vibe" width="480"/>
+</p>
+
 # Vibe
 
 **A command center for agent-driven development.** Not another IDE with AI bolted on — a workspace built from the ground up to orchestrate many coding agents on one codebase.

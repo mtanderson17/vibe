@@ -1,0 +1,169 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <!-- CONCEPT 6: Retrowave (Kavinsky / Miami Vice / Tron poster)
+       Chrome-magenta-to-cyan V with hard perspective foreshortening (top of V
+       recedes, bottom point pushes into viewer). Denser grid, bigger sun with
+       more horizon bars, palm silhouettes. Italic slanted wordmark. -->
+  <defs>
+    <linearGradient id="rw-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#0a0018"/>
+      <stop offset="0.45" stop-color="#26005a"/>
+      <stop offset="0.70" stop-color="#7a1080"/>
+      <stop offset="0.85" stop-color="#d43a80"/>
+      <stop offset="1"    stop-color="#ff5a3a"/>
+    </linearGradient>
+    <!-- sun: yellow → hot pink → magenta (Miami Vice palette) -->
+    <linearGradient id="rw-sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#ffe94a"/>
+      <stop offset="0.4"  stop-color="#ff9a2a"/>
+      <stop offset="0.75" stop-color="#ff2fbf"/>
+      <stop offset="1"    stop-color="#a51a80"/>
+    </linearGradient>
+    <!-- classic retrowave chrome: magenta-to-cyan with a bright middle band -->
+    <linearGradient id="rw-chrome" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#ff2fbf"/>
+      <stop offset="0.32" stop-color="#ff6ad5"/>
+      <stop offset="0.48" stop-color="#ffffff"/>
+      <stop offset="0.55" stop-color="#ffffff"/>
+      <stop offset="0.72" stop-color="#4affff"/>
+      <stop offset="1"    stop-color="#00b3ff"/>
+    </linearGradient>
+    <!-- extrusion side: dark magenta → deep purple -->
+    <linearGradient id="rw-side" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5a0060"/>
+      <stop offset="1" stop-color="#12002a"/>
+    </linearGradient>
+    <filter id="rw-glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="rw-sun-glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="8"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ==== sky ==== -->
+  <rect width="400" height="400" fill="url(#rw-sky)"/>
+
+  <!-- ==== stars — sparser than v5, retrowave is more atmospheric than starry ==== -->
+  <g fill="#fff" opacity="0.9">
+    <circle cx="30"  cy="24" r="1"/>
+    <circle cx="72"  cy="14" r="1.2"/>
+    <circle cx="130" cy="30" r="0.9"/>
+    <circle cx="188" cy="12" r="1.1"/>
+    <circle cx="248" cy="26" r="1"/>
+    <circle cx="308" cy="16" r="1.2"/>
+    <circle cx="360" cy="30" r="0.9"/>
+    <circle cx="58"  cy="60" r="1"/>
+    <circle cx="152" cy="70" r="1.1"/>
+    <circle cx="282" cy="62" r="1"/>
+    <circle cx="342" cy="76" r="1"/>
+  </g>
+
+  <!-- ==== the retrowave sun (bigger, more prominent) ==== -->
+  <circle cx="200" cy="230" r="120" fill="url(#rw-sun)" filter="url(#rw-sun-glow)"/>
+  <!-- horizontal cutout bars (Kavinsky-style striped sun) — cut using sky color -->
+  <g fill="url(#rw-sky)">
+    <rect x="80" y="272" width="240" height="4"/>
+    <rect x="80" y="282" width="240" height="4"/>
+    <rect x="80" y="294" width="240" height="4"/>
+    <rect x="80" y="306" width="240" height="3"/>
+    <rect x="80" y="316" width="240" height="3"/>
+    <rect x="80" y="324" width="240" height="2"/>
+    <rect x="80" y="332" width="240" height="2"/>
+  </g>
+
+  <!-- ==== horizon grid (denser, glowing cyan) ==== -->
+  <g stroke="#00e5ff" stroke-width="1" fill="none">
+    <!-- horizon line (bright magenta) -->
+    <line x1="0" y1="286" x2="400" y2="286" stroke="#ff2fbf" stroke-width="2" filter="url(#rw-glow)"/>
+    <!-- perspective lines converging at (200, 286) — every 20px along bottom -->
+    <line x1="200" y1="286" x2="-200" y2="440" opacity="0.55"/>
+    <line x1="200" y1="286" x2="-100" y2="440" opacity="0.55"/>
+    <line x1="200" y1="286" x2="-20"  y2="440" opacity="0.6"/>
+    <line x1="200" y1="286" x2="40"   y2="440" opacity="0.7"/>
+    <line x1="200" y1="286" x2="100"  y2="440" opacity="0.8"/>
+    <line x1="200" y1="286" x2="160"  y2="440" opacity="0.9"/>
+    <line x1="200" y1="286" x2="200"  y2="440" opacity="0.9"/>
+    <line x1="200" y1="286" x2="240"  y2="440" opacity="0.9"/>
+    <line x1="200" y1="286" x2="300"  y2="440" opacity="0.8"/>
+    <line x1="200" y1="286" x2="360"  y2="440" opacity="0.7"/>
+    <line x1="200" y1="286" x2="420"  y2="440" opacity="0.6"/>
+    <line x1="200" y1="286" x2="500"  y2="440" opacity="0.55"/>
+    <line x1="200" y1="286" x2="600"  y2="440" opacity="0.55"/>
+    <!-- horizontal receding bands (perspective: tighter near horizon) -->
+    <line x1="0" y1="296" x2="400" y2="296" opacity="0.4"/>
+    <line x1="0" y1="308" x2="400" y2="308" opacity="0.5"/>
+    <line x1="0" y1="324" x2="400" y2="324" opacity="0.6"/>
+    <line x1="0" y1="346" x2="400" y2="346" opacity="0.75"/>
+    <line x1="0" y1="376" x2="400" y2="376" opacity="0.85"/>
+  </g>
+
+  <!-- ==== palm tree silhouettes on horizon ==== -->
+  <g fill="#0a0018">
+    <!-- left palm -->
+    <path d="M 44 286 Q 46 260 48 232 L 50 232 Q 52 260 54 286 Z"/>
+    <path d="M 49 236 Q 30 226 12 234 Q 26 226 49 232 Z"/>
+    <path d="M 49 236 Q 68 226 88 236 Q 72 226 51 232 Z"/>
+    <path d="M 49 234 Q 34 218 22 200 Q 40 214 51 232 Z"/>
+    <path d="M 49 234 Q 66 218 78 200 Q 60 214 49 232 Z"/>
+    <!-- right palm (mirrored) -->
+    <path d="M 354 286 Q 356 260 358 232 L 360 232 Q 362 260 364 286 Z"/>
+    <path d="M 359 236 Q 340 226 322 234 Q 336 226 359 232 Z"/>
+    <path d="M 359 236 Q 378 226 398 236 Q 382 226 361 232 Z"/>
+    <path d="M 359 234 Q 344 218 332 200 Q 350 214 361 232 Z"/>
+    <path d="M 359 234 Q 376 218 388 200 Q 370 214 359 232 Z"/>
+  </g>
+
+  <!-- ==== THE V — perspective-foreshortened, tilted forward-toward-viewer ====
+       Top of V is narrower and higher (further from viewer);
+       bottom point is bigger/closer. Stroke thickness thickens toward bottom.
+       Coordinates chosen to look like a real 3-point perspective. -->
+  <g>
+    <!-- extruded side (behind, offset down-right to sell 3D block) -->
+    <g transform="translate(12, 16)">
+      <path d="M 118 92 L 168 92 L 200 216 L 232 92 L 282 92 L 214 348 L 186 348 Z"
+            fill="url(#rw-side)"/>
+    </g>
+
+    <!-- neon glow behind main face -->
+    <path d="M 118 92 L 168 92 L 200 216 L 232 92 L 282 92 L 214 348 L 186 348 Z"
+          fill="#ff2fbf" opacity="0.45" filter="url(#rw-glow)"/>
+
+    <!-- side/bevel bridge polygons connecting extrusion to front face -->
+    <g fill="#3a0060">
+      <!-- outer left edge -->
+      <polygon points="118,92 130,108 198,364 186,348"/>
+      <!-- outer right edge -->
+      <polygon points="282,92 294,108 226,364 214,348"/>
+      <!-- top of both arms -->
+      <polygon points="118,92 282,92 294,108 130,108"/>
+      <!-- bottom point -->
+      <polygon points="186,348 214,348 226,364 198,364"/>
+    </g>
+
+    <!-- MAIN FRONT FACE — chrome magenta-to-cyan -->
+    <path d="M 118 92 L 168 92 L 200 216 L 232 92 L 282 92 L 214 348 L 186 348 Z"
+          fill="url(#rw-chrome)" stroke="#ffffff" stroke-width="1.5"/>
+
+    <!-- inner reflection highlight across the middle bright band -->
+    <path d="M 120 176 L 200 176 L 282 176 L 276 194 L 200 194 L 124 194 Z"
+          fill="#ffffff" opacity="0.75"/>
+
+    <!-- thin cyan edge on the right side (fake specular) -->
+    <path d="M 282 92 L 232 92 L 200 216 L 214 348 L 220 348 L 210 220 L 240 100 L 288 100 Z"
+          fill="#4affff" opacity="0.35"/>
+  </g>
+
+  <!-- ==== wordmark: slanted italic like a Kavinsky album cover ==== -->
+  <text x="200" y="386" text-anchor="middle"
+        font-family="'Impact', 'Arial Black', sans-serif"
+        font-weight="900" font-size="26" fill="#ffffff"
+        font-style="italic" letter-spacing="10" filter="url(#rw-glow)">VIBE</text>
+</svg>

@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <!-- CONCEPT 5: 80s synthwave / Rainbow Road
+       Block V tilted forward-toward-viewer, extruded, rainbow gradient front face,
+       floating over a starfield with a perspective grid horizon and a rising sun disc.
+       Refs: Miami Vice title cards, Rainbow Road (Mario Kart), Tron, Kavinsky album art,
+       Back to the Future logo. -->
+  <defs>
+    <linearGradient id="rr-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#050014"/>
+      <stop offset="0.55" stop-color="#1a0040"/>
+      <stop offset="0.85" stop-color="#3d0060"/>
+      <stop offset="1"   stop-color="#8a1a80"/>
+    </linearGradient>
+    <linearGradient id="rr-sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#ffe94a"/>
+      <stop offset="0.5" stop-color="#ff6a2a"/>
+      <stop offset="1"   stop-color="#ff2f9a"/>
+    </linearGradient>
+    <linearGradient id="rr-rainbow" x1="0" y1="0" x2="0" y2="1">
+      <!-- vertical rainbow so the point of the V bleeds into purple -->
+      <stop offset="0"    stop-color="#ff2fbf"/>
+      <stop offset="0.18" stop-color="#ff5a3a"/>
+      <stop offset="0.36" stop-color="#ffdb2f"/>
+      <stop offset="0.55" stop-color="#5cff8a"/>
+      <stop offset="0.75" stop-color="#00e5ff"/>
+      <stop offset="1"    stop-color="#a366ff"/>
+    </linearGradient>
+    <linearGradient id="rr-side" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#4a0080"/>
+      <stop offset="1"   stop-color="#1a0030"/>
+    </linearGradient>
+    <filter id="rr-glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ==== space background ==== -->
+  <rect width="400" height="400" fill="url(#rr-sky)"/>
+
+  <!-- stars: hand-scattered so pattern doesn't loop -->
+  <g fill="#ffffff">
+    <circle cx="24"  cy="30"  r="1"/>
+    <circle cx="58"  cy="18"  r="1.4"/>
+    <circle cx="92"  cy="52"  r="0.9"/>
+    <circle cx="134" cy="22"  r="1"/>
+    <circle cx="178" cy="48"  r="1.1"/>
+    <circle cx="220" cy="14"  r="1.4"/>
+    <circle cx="256" cy="38"  r="1"/>
+    <circle cx="298" cy="20"  r="1.1"/>
+    <circle cx="338" cy="52"  r="0.9"/>
+    <circle cx="372" cy="30"  r="1.3"/>
+    <circle cx="42"  cy="82"  r="1"/>
+    <circle cx="86"  cy="104" r="1.2"/>
+    <circle cx="152" cy="90"  r="0.9"/>
+    <circle cx="190" cy="110" r="1"/>
+    <circle cx="248" cy="98"  r="1.3"/>
+    <circle cx="310" cy="112" r="0.9"/>
+    <circle cx="354" cy="86"  r="1"/>
+    <circle cx="18"  cy="140" r="1"/>
+    <circle cx="72"  cy="156" r="1.1"/>
+    <circle cx="322" cy="150" r="1.2"/>
+    <circle cx="368" cy="168" r="0.9"/>
+  </g>
+  <!-- brighter "hero" stars with soft glow -->
+  <g filter="url(#rr-glow)" fill="#fff">
+    <circle cx="60"  cy="60"  r="2"/>
+    <circle cx="270" cy="70"  r="2.2"/>
+    <circle cx="140" cy="130" r="1.8"/>
+  </g>
+
+  <!-- ==== rising sun disc (behind V) ==== -->
+  <circle cx="200" cy="240" r="105" fill="url(#rr-sun)" filter="url(#rr-glow)"/>
+  <!-- sun "slit" bands (Miami Vice style horizontal cutouts near horizon) -->
+  <g fill="url(#rr-sky)">
+    <rect x="90" y="298" width="220" height="4"/>
+    <rect x="90" y="308" width="220" height="3"/>
+    <rect x="90" y="316" width="220" height="2"/>
+  </g>
+
+  <!-- ==== horizon grid (bottom third, perspective lines) ==== -->
+  <g stroke="#00e5ff" stroke-width="1" fill="none" opacity="0.7">
+    <!-- horizon line -->
+    <line x1="0" y1="290" x2="400" y2="290" stroke="#ff2fbf" stroke-width="1.5"/>
+    <!-- perspective lines converging at (200, 290) -->
+    <line x1="200" y1="290" x2="-120" y2="420"/>
+    <line x1="200" y1="290" x2="-40"  y2="420"/>
+    <line x1="200" y1="290" x2="40"   y2="420"/>
+    <line x1="200" y1="290" x2="120"  y2="420"/>
+    <line x1="200" y1="290" x2="200"  y2="420"/>
+    <line x1="200" y1="290" x2="280"  y2="420"/>
+    <line x1="200" y1="290" x2="360"  y2="420"/>
+    <line x1="200" y1="290" x2="440"  y2="420"/>
+    <line x1="200" y1="290" x2="520"  y2="420"/>
+    <!-- horizontal receding bands (spacing gets tighter near horizon) -->
+    <line x1="0" y1="304" x2="400" y2="304" opacity="0.35"/>
+    <line x1="0" y1="320" x2="400" y2="320" opacity="0.45"/>
+    <line x1="0" y1="342" x2="400" y2="342" opacity="0.55"/>
+    <line x1="0" y1="372" x2="400" y2="372" opacity="0.65"/>
+  </g>
+
+  <!-- ==== the V, tilted-forward with hard extrusion ====
+       Coordinates: outer-TL(60,80) inner-TL(128,80) joint(200,232)
+                    inner-TR(272,80) outer-TR(340,80) bottom-point(200,340).
+       Overall group is rotated slightly + skewed to sell the "coming at you" tilt. -->
+  <g transform="translate(0,-6) rotate(-4 200 210)">
+    <!-- extruded side polygon: right-and-down offset behind the main V.
+         Sized to catch the outside silhouette of the V so it reads as a solid 3D block. -->
+    <g transform="translate(14, 14)">
+      <path d="M 60 80 L 128 80 L 200 232 L 272 80 L 340 80 L 200 340 Z"
+            fill="url(#rr-side)"/>
+    </g>
+    <!-- side "bridge" quads that connect front to extrusion, giving hard bevel edges -->
+    <g fill="#2a0055">
+      <!-- outer left arm side -->
+      <polygon points="60,80 74,94 214,354 200,340"/>
+      <!-- outer right arm side -->
+      <polygon points="340,80 354,94 214,354 200,340"/>
+      <!-- top edges of both arms -->
+      <polygon points="60,80 340,80 354,94 74,94"/>
+    </g>
+
+    <!-- neon glow behind main face -->
+    <path d="M 60 80 L 128 80 L 200 232 L 272 80 L 340 80 L 200 340 Z"
+          fill="url(#rr-rainbow)" filter="url(#rr-glow)" opacity="0.55"/>
+
+    <!-- main front face of V -->
+    <path d="M 60 80 L 128 80 L 200 232 L 272 80 L 340 80 L 200 340 Z"
+          fill="url(#rr-rainbow)" stroke="#ffffff" stroke-width="1.5"/>
+
+    <!-- inner highlight streak (suggests polished bevel) -->
+    <path d="M 74 90 L 132 90 L 200 232 L 195 246 L 128 100 Z"
+          fill="#ffffff" opacity="0.35"/>
+  </g>
+
+  <!-- ==== wordmark ==== -->
+  <text x="200" y="384" text-anchor="middle"
+        font-family="'Impact', 'Arial Black', sans-serif"
+        font-weight="900" font-size="28" fill="#ffffff"
+        letter-spacing="16" filter="url(#rr-glow)">VIBE</text>
+</svg>
