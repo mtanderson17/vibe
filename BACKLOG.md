@@ -448,6 +448,83 @@ The pull is obvious: agents are long-running and machine-bound, and a laptop is
 the wrong host. This also subsumes the old "bring-your-own-compute" idea —
 same protocol, one machine at a time, no cloud infrastructure to build.
 
+### #88 · Task graph with file ownership
+
+From [Bernstein](https://github.com/sujeito-operator/bernstein), whose planner
+decomposes a goal into tasks carrying **roles, owned files, and completion
+signals**.
+
+The "owned files" part is the idea worth taking, because it inverts something
+Vibe currently does backwards. We detect overlap **at merge time** and warn —
+reactive, after both agents have already done the work. Bernstein assigns file
+ownership **at planning time**, so two agents are never dispatched at the same
+files in the first place. Prevention beats a warning, and it costs nothing at
+runtime.
+
+The graph half matters too: `.vibe/tasks.json` is a flat list with a status
+field and no dependencies, so nothing can express "B can't start until A
+lands." That's the missing primitive for any automated dispatch (#81), and
+it's what turns a kanban board into a scheduler.
+
+Compatible with keeping tasks.json plain and diffable — a `dependsOn` array and
+an `ownedFiles` array are just more JSON.
+
+### #89 · Per-task completion signals
+
+Bernstein's Janitor verifies concrete, declared signals: tests pass, files
+exist, lint clean, types correct. This sharpens #83 from "run the project's
+verification" into something better: **the definition of done travels on the
+task card**, and different tasks can declare different signals.
+
+It also makes agent output checkable without a human reading the diff first,
+which is the precondition for #82's queue gating on anything but "applies
+cleanly."
+
+### #90 · Keep the coordination loop free of LLM calls
+
+Both [Bernstein](https://bernstein.run) and Microsoft Conductor land on the
+same rule from different directions: one LLM call to decompose the goal, then
+**plain deterministic code for every scheduling decision** — zero tokens spent
+on coordination, and runs that replay identically.
+
+Note carefully what this does and doesn't mean for us. Vibe's scheduling is
+already zero-token, because a human does it by dragging cards. So this is not
+a change to today's behaviour — **it's a constraint on #81 and on any
+"describe a goal and let it run" mode.** When we automate dispatch, the
+temptation will be to ask a model which agent should take which task. Don't.
+Decide it in code.
+
+The reason this matters more for us than for anyone else in the survey: our
+whole position is the $0 path. Coordination that burns tokens makes the free
+tier worse precisely as you use more of it. The PM agent should keep doing the
+things that genuinely need a model — summarising, proposing work — and never
+become the scheduler.
+
+### #91 · Replay journal and audit trail
+
+Bernstein keeps state outside agent memory with a replay journal and an opt-in
+HMAC-chained audit log a reviewer can verify offline;
+[ctx](https://ade.ctx.rs/) makes the same argument as "durable transcripts."
+
+Vibe persists agent state to `.vibe/agents/*.json` as current state only —
+there's no record of *how* it got there that survives, and no way to replay a
+run. The cost ledger is already append-only JSONL and is the right shape to
+generalise from.
+
+Worth building only alongside #82/#88, since a replay journal of a
+human-driven, non-deterministic flow is much less useful than one of a
+scheduled pipeline.
+
+### #92 · Expose the task board as an MCP server
+
+Vibe Kanban ships an MCP server so a "planning" ticket can instruct an agent to
+decompose work into downstream cards. Vibe is already an MCP **client** — being
+a **server** is the cheap inverse, and it lets an agent file, split, or update
+tasks mid-run instead of only at the PM agent's post-merge pass.
+
+Small, and it composes with #88: an agent that discovers hidden work can add a
+node to the graph rather than silently expanding its own scope.
+
 ### Bug · `launch_app` output is lost on Windows
 
 `launchApp` spawns with `detached: true` through `cmd.exe`. On Windows that puts
@@ -488,6 +565,59 @@ Reviewed: [JetBrains Air](https://air.dev/),
 [Agentastic](https://www.agentastic.dev/),
 [KingCoding](https://www.producthunt.com/products/kingcoding),
 [Anvil](https://www.producthunt.com/products/anvil-5).
+
+### The useful axis: coordination depth
+
+The sharpest way to read this space isn't by feature list but by **how much of
+the merge / conflict / task-routing decision-making the tool takes off your
+hands**. Three tiers:
+
+**Tier 1 — session managers.** Parallel isolated sessions; the human makes
+every call. Claude Squad (tmux + worktrees; AGPL-3.0, no native Windows),
+Nimbalyst (successor to Crystal, which Stravu deprecated Feb 2026; adds visual
+editing of markdown/mockups/Excalidraw next to sessions), Vibe Kanban
+(unrelated to us despite the name; Bloop shut down April 2026, now
+community-maintained), Agent Kanban (a VS Code Copilot Chat participant, no
+loop of its own), plus everything in the Emdash/Superset/Agentastic cluster
+below.
+
+**Tier 2 — milestone gates.** The tool handles CI and retries; the human
+approves at PR time. [Agent Orchestrator](https://github.com/Untrivial-ai/agent-orchestrator)
+(agents fix CI failures and answer review comments, managing their own PR
+lifecycle; 26 worker harnesses), [Bernstein](https://github.com/sujeito-operator/bernstein)
+(Goal → Planner → Task Graph → Orchestrator → Agents → Janitor → merge, with
+deterministic Python scheduling), Microsoft Conductor (YAML workflows, no LLM
+in the orchestration loop). GitHub-issue-driven variants: Baton (polls
+`gh issue list`, config in one `WORKFLOW.md`), Code Conductor (issues labelled
+`conductor:task`, Claude Code only).
+
+**Tier 3 — managed/cloud.** Runtime moves off your machine; persistent memory,
+standing triggers, audit trails. Augment's Cosmos and similar. The framing
+that fits: coordination stops belonging to *you* and starts belonging to *the
+team*.
+
+**Not the same category, but the reason the category exists:** the
+single-agent-per-editor assistants — Cursor, Windsurf, Copilot Agent Mode,
+JetBrains AI, Antigravity, Kiro. Everything above is a reaction to them.
+
+### Where Vibe sits, and the move that changes it
+
+**Vibe is Tier 1** — no automated CI gates, no auto-merge, a human decides
+everything — **but with one Tier-2 organ nothing else in Tier 1 has:** the PM
+agent maintaining a running summary and proposing tasks after each merge.
+That's a lighter-weight cousin of Bernstein's Janitor and Agent Orchestrator's
+milestone gates.
+
+The thing to be deliberate about: **#82 (merge queue) and #83 (verification
+evidence) are not ordinary features — together they are the Tier 1 → Tier 2
+transition.** Automated gates between "agent finished" and "code on main" is
+exactly what defines the boundary. That's a product decision about how much
+judgement to take away from the user, and it should be made on purpose rather
+than arrived at one PR at a time. Bernstein and Agent Orchestrator are the
+prior art to study before starting either.
+
+One practical constraint: **Claude Squad is AGPL-3.0**, so its code can't be
+borrowed into an MIT project. Read it for ideas, don't copy from it.
 
 ### The finding that matters more than any feature
 
@@ -534,7 +664,15 @@ like the PM agent maintaining a shared summary across agents.** That, plus the
 $0 path, is the defensible ground. When two features are the same size, build
 the one in that layer.
 
-### What the survey added
+### What the tier survey added
+
+#88 (task graph with file ownership — the single best idea in this round:
+Bernstein assigns owned files at *planning* time, where we only warn about
+overlap at *merge* time), #89 (per-task completion signals), #90 (keep the
+coordination loop token-free — a constraint on #81, not a change to today),
+#91 (replay journal), #92 (task board as an MCP server).
+
+### What the first survey added
 
 Filed above as #82 (merge queue), #83 (verification evidence), #84 (task
 anchors), #85 (plan visibility + notifications), #86 (bounded autonomy), #87
