@@ -4,9 +4,13 @@
 
 # Vibe
 
+[![CI](https://github.com/mtanderson17/vibe/actions/workflows/ci.yml/badge.svg)](https://github.com/mtanderson17/vibe/actions/workflows/ci.yml)
+
 **A command center for agent-driven development.** Not another IDE with AI bolted on — a workspace built from the ground up to orchestrate many coding agents on one codebase.
 
 Free forever, open source, works out of the box with FOSS models.
+
+**Docs:** [Getting started](docs/getting-started.md) · [Concepts](docs/concepts.md) · [Configuration](docs/configuration.md) · [Architecture](docs/architecture.md) · [Troubleshooting](docs/troubleshooting.md) · [Backlog](BACKLOG.md)
 
 ## Why
 
@@ -24,7 +28,7 @@ Modern coding is drifting from "human writes code" to "human directs agents." Ex
 Requires Node 20+ and Git 2.5+.
 
 ```bash
-git clone <this repo>
+git clone https://github.com/mtanderson17/vibe.git
 cd vibe
 npm install
 npm run dev
@@ -48,44 +52,56 @@ Then in Control Center: **+ agent** → give it a task → watch it work.
 | **Local Ollama** | $0 (no cap) | Install Ollama, pull a model | Privacy, offline, unlimited use |
 | **OpenRouter paid / BYO frontier key** | Real dollars | Same key + credit | Serious work, frontier quality |
 
-## What ships in v0.2
+## What ships today
 
 **Core**
 - Up to 8 concurrent agents, each in its own git worktree + branch
-- Multi-turn conversation with agents (`ask_human` tool, follow-up during `awaiting_merge`)
+- Multi-turn conversation with agents (`ask_human` / `ask_human_choice`, follow-up during `awaiting_merge`)
 - Kill/interrupt running agents
-- Streaming responses via SSE
+- Streaming responses
 - Sibling awareness (agents know what other agents are working on)
-- Per-task model pinning (no mid-loop model chaos)
+- Per-agent model override; per-task model pinning (no mid-loop model chaos)
+- `todo_write` / `todo_read` scratchpad so an agent keeps its own plan
+- Context condensation — compacts old transcript past a token budget, keeping the cache-stable head intact
 - Persisted agent state across restarts
 
 **Provider stack**
-- OpenAI-compatible adapter routes to OpenRouter, Ollama, or any compatible endpoint
-- Fallback chains (`openrouter/free,minimax/minimax-m3:free`) with automatic failover
+- Vercel AI SDK adapters for OpenRouter, Anthropic, OpenAI, Gemini, Groq, xAI, and Ollama
+- Fallback chains (`anthropic/claude-sonnet-4-6,openrouter/free`) with automatic failover
 - On-startup probe: tests which free models actually work for your account
+- Dynamic model catalogs from provider APIs
 - Friendly error messages for common failures (rate limits, deprecated models, CUDA crashes)
+
+**MCP**
+- Connect Model Context Protocol servers from `.vibe/mcp.json`
+- Their tools appear to agents as built-ins, namespaced `mcp_<server>_<tool>`
 
 **AI-assisted merges**
 - Merge conflict resolution agent with inline diff view (before/after per file, syntax-highlighted markers)
+- Diff preview before merging
 - File overlap warnings before merge (against sibling agent branches)
 
 **Project management (PM) agent**
 - Runs automatically after every merge to update `.vibe/context/summary.md`
 - Proposes follow-up tasks based on observed changes (human accepts/dismisses)
 - Chat with it directly from the Tasks screen
+- Its own model chain, so summarization doesn't burn coding-model budget
 - Its summary is injected into every agent's prompt — shared, current project state
 
-**Workspace hygiene**
+**Safety and hygiene**
+- API keys encrypted at rest via Electron `safeStorage` (Keychain / DPAPI / libsecret)
+- Approval gate on dangerous shell commands (`rm -rf`, `git push`, `git reset --hard`)
 - Auto-seeded workspace `.gitignore` (excludes secrets, `.vibe/worktrees/`, bytecode, deps)
 - Auto-seeded workspace `.vibe/AGENTS.md` (per-project customization)
-- Dependency isolation guidance for agents (create venvs, avoid global installs)
 
 **UI**
-- Sidebar nav: Control Center · Tasks · Cost · Context · Settings
+- Sidebar nav: Control Center · Tasks · Files · Cost · Context · Settings
 - Control Center grid: all agents at a glance, click any tile to focus
 - Tasks kanban: Backlog / In Progress / Awaiting Merge / Done + Proposed row
-- Cost view: per-agent token counts and estimated dollars, sourced from OpenRouter pricing
+- Files: Monaco editor over the workspace, lazy-loaded
+- Cost: per-agent tokens and dollars from an append-only ledger that survives restarts
 - Context tabs: Project (human-owned) | Summary (PM-maintained)
+- Command palette (`Cmd/Ctrl+K`), customizable keybindings, project switcher
 
 ## Architecture
 
@@ -93,7 +109,7 @@ Then in Control Center: **+ agent** → give it a task → watch it work.
 ┌─────────────────────────────────────────────────┐
 │  Renderer (React + Zustand)                     │
 │  - Sidebar, Control Center, Agent panels        │
-│  - Tasks kanban, Cost, Context tabs             │
+│  - Tasks kanban, Files, Cost, Context tabs      │
 │  - Never touches disk or network directly       │
 └─────────────────┬───────────────────────────────┘
                   │ IPC (contextBridge)
@@ -101,12 +117,17 @@ Then in Control Center: **+ agent** → give it a task → watch it work.
 │  Electron main process                          │
 │  - Agent lifecycle (spawn, kill, close)         │
 │  - Git worktrees (create, merge, cleanup)       │
-│  - Provider adapters (OpenRouter, Ollama)       │
+│  - Provider adapters + fallback chains          │
+│  - MCP client (external tool servers)           │
 │  - PM agent (post-merge summary + task propose) │
 │  - Merge conflict resolver                      │
+│  - Cost ledger, condenser, approval gate        │
 │  - Persistence (.vibe/agents/*.json)            │
 └─────────────────────────────────────────────────┘
 ```
+
+Module-by-module detail, and the conventions worth keeping, are in
+[docs/architecture.md](docs/architecture.md).
 
 Each user workspace has:
 ```
@@ -116,6 +137,7 @@ your-project/
 ├── src/, tests/, etc.      # your actual code
 └── .vibe/
     ├── AGENTS.md           # per-project agent conventions
+    ├── mcp.json            # MCP server definitions
     ├── context/
     │   ├── project.md      # human-owned project brief
     │   └── summary.md      # PM-maintained running state
@@ -130,16 +152,15 @@ your-project/
 npm run dev         # Electron dev with hot reload
 npm run build       # Production build
 npm run typecheck   # tsc across main + renderer
-npm test            # Node's built-in test runner via tsx (69 tests as of v0.3)
+npm test            # Node's built-in test runner via tsx (221 tests)
 ```
+
+CI runs all three on Linux, Windows, and macOS for every push and PR.
 
 ## Known issues / rough edges
 
 Being upfront about the state of the app while it's still stabilizing:
 
-- **Cost tracking is per-task, not persistent.** Closing an agent or starting a new
-  task resets its token counter. There's no session/daily/all-time total yet. A
-  proper persistent cost ledger is on the backlog.
 - **Small local models produce small-model results.** Free-tier and 3B Ollama models
   often mis-format tool calls, hallucinate URLs into binary files, or ignore
   AGENTS.md guidance. This is a model-quality floor, not a Vibe bug. BYOK Anthropic
@@ -150,59 +171,59 @@ Being upfront about the state of the app while it's still stabilizing:
   turn. If a sibling starts/finishes mid-turn, the current agent won't notice
   until you re-engage. File-overlap warnings at merge time cover the practical
   worst case regardless.
-- **PM agent runs on the same global model as coding agents.** No dedicated
-  model-per-role yet (individual agents can override, PM cannot).
 - **UI polish is uneven.** Some screens (Control Center, Cost) are tight; others
   (Setup, Merge conflict banner) could use another pass.
+- **No packaged install yet.** `git clone` + `npm run dev` is the only path.
+  Packaging and auto-update are [#66 and #73](BACKLOG.md).
 - **No sandboxing on `run_bash`.** Agents can install packages globally,
-  read/modify files outside the worktree via shell, etc. Use a scratch workspace
-  when testing. Container-per-agent isolation is planned.
+  read/modify files outside the worktree via shell, etc. The approval gate
+  catches a short list of dangerous patterns — it's a speed bump, not a
+  boundary. Use a scratch workspace when testing. Container-per-agent isolation
+  is [#68](BACKLOG.md).
 
 ## Security
 
-**API keys** live in Electron's per-user data directory (`%APPDATA%\vibe\config.json` on Windows, `~/Library/Application Support/vibe/config.json` on macOS), unencrypted. Outside the project folder so they won't be committed. Migration to OS-level credential storage (`safeStorage`) is on the roadmap.
+**API keys** live in Electron's per-user data directory (`%APPDATA%\vibe\config.json` on Windows, `~/Library/Application Support/vibe/config.json` on macOS, `~/.config/vibe/config.json` on Linux) — outside the project folder, so they can't be committed. They're encrypted at rest via `safeStorage`: Keychain on macOS, DPAPI on Windows, kwallet/libsecret on Linux. On a Linux box with no keyring available it falls back to plain text; encrypted values are marked with an `enc:` prefix so you can tell which you have.
 
-**Agents run unsandboxed.** `run_bash` executes arbitrary commands in the agent's worktree. Vibe blocks path escapes for `read_file`/`write_file` but does not sandbox `run_bash`. Use a scratch workspace when trying tasks; don't point Vibe at folders with production secrets. Container-per-agent isolation is planned for the BYOC (bring-your-own-compute) roadmap.
+**Agents run unsandboxed.** `run_bash` executes arbitrary commands in the agent's worktree. Vibe blocks path escapes for `read_file`/`write_file`, and `approval.ts` pauses for your confirmation on a short list of dangerous patterns — but that gate doesn't catch subshells, `eval`, or a script the agent writes and then runs. Use a scratch workspace when trying tasks; don't point Vibe at folders with production secrets. Container-per-agent isolation is [#68](BACKLOG.md).
 
 **What never gets committed:** the auto-seeded workspace `.gitignore` excludes `.env`, `*.pem`, `*.key`, common secret patterns, and `.vibe/worktrees/`. Review it before adding sensitive files.
 
 ## Roadmap
 
-**Near term**
-- Container-per-agent isolation for `run_bash` sandboxing (approval shell already ships)
-- Ollama model badges in setup (mark which support tool calling)
-- Streaming for Ollama (currently only OpenRouter/Anthropic stream)
-- Playwright-driven UI tests
+Planned work with the reasoning behind it lives in **[BACKLOG.md](BACKLOG.md)**,
+kept in the repo so it survives between sessions. The short version:
 
-**Mid term**
-- **MCP client support** — connect to Model Context Protocol servers so agents can
-  use browser control (Playwright MCP), web search, DB access, Notion/Linear/Slack
-  integrations, and the whole github.com/modelcontextprotocol/servers ecosystem
-- **Remote-dev / "Vibe on your VM"** — SSH into a machine, run Vibe against files
-  there as if local (pattern borrowed from Zed's remote-dev). Natural pairing with
-  BYOC — same protocol, single machine host, no cloud infrastructure needed
-- Bring-your-own-compute (BYOC): run agents on user-provided VMs
-- Automatic model routing (cheap for simple tasks, frontier for complex — via RouteLLM or similar)
-- Monaco editor pane for inline code review during agent turns
-- Streaming Ollama support (currently only OpenRouter streams)
-- Auto-linking task cards to agent branches/commits
+**Next** — packaging and signed installers (#66) is the keystone; auto-update
+(#73), onboarding (#74), launch-speed work (#75), and real install docs all
+depend on it existing.
 
-**Longer term**
-- Vibe Cloud (optional hosted agents for walk-away work — freemium tier, core stays free)
-- Team collaboration (shared workspaces, real-time agent visibility)
-- Agent specialization ("droids" — reviewer, test-writer, refactorer with pre-baked prompts)
-- Agent Client Protocol (ACP) support to orchestrate external CLIs like Claude Code / Codex alongside native agents
+**After that** — container-per-agent sandboxing (#68), the data-science workflow
+(#71), and the open design question of how optional heavyweight features should
+plug in without a premature plugin API (#69).
+
+**Longer term, not yet filed** — remote-dev over SSH, bring-your-own-compute,
+automatic model routing (cheap for simple tasks, frontier for complex), agent
+specialization (reviewer / test-writer / refactorer with pre-baked prompts),
+and Agent Client Protocol support for orchestrating external CLIs alongside
+native agents.
 
 ## Contributing
 
 PRs welcome. Small changes: open a PR. Larger changes or new features: file an issue first so we can align on approach before you invest time.
 
-Testing:
+Read [docs/architecture.md](docs/architecture.md) first — it covers the process
+split, where things live, and two conventions that are easy to break by
+accident (screens own state; zustand subscriptions stay narrow).
+
+Before opening a PR:
 ```bash
 npm test            # runs the whole suite
 npm run typecheck   # verify types compile
 npm run build       # verify production build
 ```
+
+CI runs the same three across Linux, Windows, and macOS.
 
 ## License
 
