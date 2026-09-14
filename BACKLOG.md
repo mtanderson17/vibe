@@ -17,6 +17,11 @@ bypass to every user and re-shipping later. See "Runtime upgrade" below.
 worktrees): it's small, measurable, and speeds up the most repeated interaction
 in the app.
 
+**The most strategically valuable item is #82** (merge queue). See "The field,
+surveyed 2026-09-14" for why: it lives in the one layer that no agent CLI
+vendor will build for us, and Vibe's current merge story degrades precisely as
+parallelism — the thing the product is sold on — increases.
+
 ---
 
 ## Open
@@ -69,6 +74,14 @@ Design questions to settle first:
 
 Worth reading first: Cline's approach, Aider's compute isolation story, the
 VS Code devcontainers spec.
+
+Two refinements from the field survey (2026-09-14). **JetBrains Air offers
+container *or* git worktree as a per-task choice** rather than forcing one —
+the right shape, since a container is overkill for a docs edit and essential
+for `npm install`. And **ctx isolates the network, not just the disk**, with
+configurable egress policy; that's arguably the more valuable half, since an
+agent that can't reach the internet can't exfiltrate a key it happened to read.
+See also #86, which reframes the approval gate this buys.
 
 Not blocking anything else, but it's the biggest confidence win for letting
 less-technical users run agents.
@@ -214,14 +227,19 @@ working with free OpenRouter models or Ollama, and an external-agent mode lets
 someone point their existing Claude Code subscription at the same worktree and
 merge UI. Neither tool offers that today.
 
-Worth stealing specifically: Emdash detects installed provider CLIs
-automatically, and installs marker-tagged lifecycle hooks into their config so
-it gets progress, notifications and resumable sessions — hooks that stay inert
-when the agent runs outside Emdash. That's a well-mannered integration pattern
-and better than screen-scraping a terminal.
+**Use ACP, don't invent an integration.** JetBrains Air drives Codex, Claude
+Agent, Gemini CLI and Junie through the **Agent Client Protocol**, with more
+coming via an ACP Agent Registry. That's the standard to target: one protocol
+rather than N bespoke adapters, and JetBrains putting its weight behind it
+makes it the likely winner. This supersedes the vague "ACP support" line that
+used to sit in the README roadmap — it's now the concrete mechanism for this
+item.
 
-This supersedes the vague "ACP support" line that used to sit in the README
-roadmap.
+Also worth stealing: Emdash detects installed provider CLIs automatically, and
+installs marker-tagged lifecycle hooks into their config so it gets progress,
+notifications and resumable sessions — hooks that stay inert when the agent
+runs outside Emdash. A well-mannered pattern, and much better than
+screen-scraping a terminal, for any agent that isn't reachable over ACP.
 
 ### #80 · Make the board and agent state scale
 
@@ -253,6 +271,112 @@ Emdash schedules agent work. Vibe only starts an agent when a human clicks.
 The obvious version: run a task at a time, or on a trigger (post-merge, on a
 new issue), and have results waiting. Pairs naturally with #77.
 
+### #82 · Merge queue
+
+The best idea found in the whole survey, from [ctx](https://ade.ctx.rs/), and
+the one that most deserves the word "fundamental."
+
+Vibe's current model: an agent finishes, you get an overlap *warning*, you
+merge, and if a sibling landed first you deal with the conflict by hand. That
+degrades exactly as parallelism increases — the feature the product is sold on.
+
+A merge queue inverts it. Ready changes enter a queue rather than merging
+directly, and the first gate is mechanical: *does this still apply cleanly on
+top of the current target branch?* If not, it goes back for revision — and the
+agent that produced it is still alive and holds all the context needed to
+rebase itself. Conflicts stop being a human's problem at the moment they're
+cheapest to fix.
+
+This sits squarely in the layer that no single agent CLI will ever build (see
+the field notes), and it composes with everything else here: the overlap check
+becomes the queue's pre-flight, #78's CI status becomes a second gate, and
+#83's verification evidence becomes a third.
+
+Design questions: ordering (FIFO, or smallest-diff-first to minimize churn?),
+how many revision rounds before a human is pulled in, and whether the queue
+runs speculatively ahead of review or only after a human approves.
+
+### #83 · Verification evidence before the merge decision
+
+[KingCoding](https://www.producthunt.com/products/kingcoding) auto-reviews
+agent results and captures verification screenshots.
+[ctx](https://ade.ctx.rs/) argues the same point from the other side: *"a bare
+diff is not enough"* — keep the prompt, transcript, commands, artifacts and
+worktree state that produced it.
+
+Today Vibe hands you a diff and asks you to merge. You can't see whether the
+tests passed, whether the app still starts, or what the agent actually ran. All
+of that exists — the transcript has the commands, and `launch_app` can run the
+app — it's just not collected into the decision.
+
+Shape: on `finish`, run the project's verification (tests, typecheck, whatever
+`.vibe/AGENTS.md` names) and attach the result to the `awaiting_merge` banner.
+Screenshots where a UI is involved, via the `launch_app` path. The human
+decision becomes evidence-based rather than vibes-based, which is the whole
+premise of keeping a human there.
+
+Pairs tightly with #82: a queue needs a gate, and this is the gate worth having.
+
+### #84 · Anchor tasks to code, not just prose
+
+[JetBrains Air](https://air.dev/) lets you define a task against precise
+context — a specific line, commit, class, or method — and the agent starts from
+that anchor.
+
+A Vibe task is a title and a description string. "Fix the retry logic" makes the
+agent go hunting; a task anchored to `providers/index.ts:88` does not. Anchors
+also survive into the prompt as exactly the kind of context that stops a weak
+model from flailing — which matters more for us than for the tools that ride on
+frontier-model CLIs.
+
+Cheap version: let a task carry `file:line` refs, and let the Files editor send
+a selection straight to a new task card.
+
+### #85 · Make parallel work legible at a glance
+
+Two ideas from the field, one problem. [Anvil](https://www.producthunt.com/products/anvil-5)
+does first-class plan tracking and colour-codes agent state;
+[Air](https://air.dev/) sends notifications when a task needs attention.
+
+Vibe has both gaps, confirmed by grep:
+
+- **The agent's plan is invisible.** `todo_write`/`todo_read` exist and agents
+  use them, but nothing in the renderer reads a todo list. The agent is keeping
+  a plan and we're hiding it from the one person supervising.
+- **No notifications of any kind.** With up to 8 agents, an agent going
+  `awaiting_input` is silent unless you happen to be on its tab. The whole
+  premise is walking away while agents work, and nothing tells you to come back.
+
+Both are small and both directly serve the supervision loop.
+
+### #86 · Bounded autonomy instead of per-command prompts
+
+[ctx](https://ade.ctx.rs/) frames its containerization as buying *"bounded
+autonomy instead of constant approval prompts"* — a policy envelope agreed once
+up front rather than a modal per dangerous command.
+
+Vibe's `approval.ts` is the prompt-per-command model, and its own header admits
+it's a speed bump rather than a boundary. As agent count rises, prompts become
+the bottleneck and get click-throughed, which is worse than no gate.
+
+Rethink alongside #68: declare what an agent may do (write inside the worktree,
+network to these hosts, never push) and let it run freely inside that, rather
+than interrupting on pattern matches. Also worth stealing from ctx: **network
+egress policy**, not just filesystem isolation — the more valuable half, and
+absent from #68 as written.
+
+### #87 · Remote execution
+
+Filed properly now, because three independent tools ship it:
+[Emdash](https://github.com/generalaction/emdash) (SSH/SFTP with keychain
+credentials), [ctx](https://ade.ctx.rs/) (run on remote machines you control),
+and [Agentastic](https://www.agentastic.dev/) (free remote options as a selling
+point). It was previously a vague "longer term" line in the README.
+
+The pull is obvious: agents are long-running and machine-bound, and a laptop is
+the wrong host. This also subsumes the old "bring-your-own-compute" idea —
+same protocol, one machine at a time, no cloud infrastructure to build.
+
 ### Bug · `launch_app` output is lost on Windows
 
 `launchApp` spawns with `detached: true` through `cmd.exe`. On Windows that puts
@@ -281,6 +405,87 @@ Windows when the command needs no shell features.
 
 `tests/platform.test.ts` asserts the good behaviour on macOS/Linux and skips
 Windows with a pointer here — remove that guard as part of the fix.
+
+---
+
+## The field, surveyed 2026-09-14
+
+Reviewed: [JetBrains Air](https://air.dev/),
+[Emdash](https://github.com/generalaction/emdash),
+[ctx ADE](https://ade.ctx.rs/),
+[Superset](https://github.com/superset-sh/superset),
+[Agentastic](https://www.agentastic.dev/),
+[KingCoding](https://www.producthunt.com/products/kingcoding),
+[Anvil](https://www.producthunt.com/products/anvil-5).
+
+### The finding that matters more than any feature
+
+**Every single one of them orchestrates agent CLIs somebody else wrote. Not one
+builds its own agent loop. Vibe is the only outlier in the survey.**
+
+| Tool | Agent loop | Isolation | Notable |
+|---|---|---|---|
+| JetBrains Air | ACP: Codex, Claude, Gemini, Junie | container *or* worktree | ACP registry; task anchored to line/commit/class |
+| Emdash | your installed CLIs | worktree | issue-tracker ingestion; SSH remote; pre-warmed worktrees |
+| ctx ADE | Claude Code, Codex, Cursor… | container, disk **and network** | **merge queue**; durable transcripts |
+| Superset | "100+ agents", your subscription | worktree | terminal, review, open-in-editor |
+| Agentastic | 52 agent definitions, native Swift | worktree + containers | built-in editor, browser, diff viewer |
+| KingCoding | Claude Code, Codex | — | **auto-review + verification screenshots**; goal-level "King Mode" |
+| Anvil | parallel Claude Codes | worktree | plan tracking; colour-coded agent state |
+| **Vibe** | **its own** | worktree | **$0 path; PM agent maintaining shared state** |
+
+Seven independent teams, one conclusion: don't write the loop, wrap the CLIs.
+That is strong evidence and it deserves a straight answer rather than a
+defensive one.
+
+**Where the convergence is right.** You cannot out-engineer Anthropic's harness
+on harness quality, and every hour spent on the loop is an hour not spent on
+the layer above it. Our own README concedes the symptom — "small models produce
+small-model results." #79 is not optional; it's the correction.
+
+**Where it is wrong, and this is the whole argument for Vibe.** Every one of
+those seven requires the user to already own a paid agent CLI subscription.
+Their floor is $20–200/month. Vibe's floor is **zero** — free OpenRouter models
+or a local Ollama, no account, no card. Nobody in this survey serves that user,
+and it isn't an oversight: once you've decided to wrap CLIs, you structurally
+cannot, because the CLIs themselves are the paywall. So the right move is both,
+not either: keep the native loop as the free tier, add ACP agents (#79) for
+people who already pay, and let the two share one review surface.
+
+**The layer that survives either way.** The CLIs will keep absorbing
+orchestration — Emdash's founders said so themselves, and Air is JetBrains
+conceding the same by building around agents instead of inside them. What no
+single agent vendor will build is the cross-agent, cross-provider,
+human-in-the-loop review of *parallel* work: the merge queue (#82), the
+verification gate (#83), overlap detection, and the PM agent's shared project
+state. Note that last one is ours alone — **no tool in this survey has anything
+like the PM agent maintaining a shared summary across agents.** That, plus the
+$0 path, is the defensible ground. When two features are the same size, build
+the one in that layer.
+
+### What the survey added
+
+Filed above as #82 (merge queue), #83 (verification evidence), #84 (task
+anchors), #85 (plan visibility + notifications), #86 (bounded autonomy), #87
+(remote execution). #68 gained network isolation and the container-or-worktree
+choice; #79 gained ACP as its concrete mechanism.
+
+Two more noted but not filed, as they need a direction decision first:
+KingCoding's **goal-level "King Mode"** (describe an outcome; the system plans,
+dispatches and adapts while the human sets direction and grants permissions) is
+roughly what our PM agent would become if it could assign its own proposed
+tasks to idle agents. And Superset/Agentastic both treat **"bring your own
+subscription"** as the headline, which is the exact inverse of our pitch —
+useful confirmation that the positioning axis is real and contested.
+
+### Could not verify
+
+**"Tendi sandbox ADE"** returned nothing across several searches. The nearest
+match is [Tenki Sandbox](https://tenki.cloud/products/sandbox) — disposable
+Linux VMs for AI agents, which is infrastructure rather than an ADE, and would
+be a #68 building block rather than a competitor. If Tendi is a different
+product, it needs a URL to review properly; I'd rather leave this blank than
+guess.
 
 ---
 
