@@ -235,6 +235,33 @@ makes it the likely winner. This supersedes the vague "ACP support" line that
 used to sit in the README roadmap — it's now the concrete mechanism for this
 item.
 
+**Cost tracking survives the swap — verified, not assumed.** The obvious
+objection to running someone else's harness is that we stop seeing token usage
+and the Cost screen goes dark for those agents. That turns out to be false for
+Claude Code, which reports usage through three channels:
+
+- `claude -p --output-format json` returns `total_cost_usd`, a full `usage`
+  block (cache creation vs cache read, thinking tokens) and `modelUsage` — a
+  per-model breakdown with `costUSD`, context window and provider. A single
+  turn can bill two models and it attributes both.
+- `--output-format stream-json` carries usage on **every** `assistant` event as
+  well as the final `result`, so metering is live per turn rather than only at
+  session end. It also emits `rate_limit_event`, which we could surface.
+- `~/.claude/projects/**/*.jsonl` holds per-turn usage on disk, so a session
+  can be accounted for retroactively.
+
+This is *richer* than our own ledger, which records prompt/completion tokens
+and derives dollars from `pricing.ts`: it gives dollars directly, splits cache
+reads from writes (we don't track that at all), and attributes per model.
+
+The one caveat is a labelling problem, not a data problem: the JSON reports
+`"costBasis": "list"`, so for a subscription user the figure is what the work
+*would* have cost on the API, not what they will be billed. Show it as such.
+
+Expect the other ACP agents to differ here — this was checked for Claude Code
+only. Treat per-backend usage reporting as a capability the backend declares,
+not something to assume either way.
+
 Also worth stealing: Emdash detects installed provider CLIs automatically, and
 installs marker-tagged lifecycle hooks into their config so it gets progress,
 notifications and resumable sessions — hooks that stay inert when the agent
