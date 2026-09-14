@@ -3,9 +3,19 @@
 Planned work, in the repo so it survives between sessions. Shipped work lives in
 `git log`, not here — an item leaves this file when it lands.
 
-**#66 is the keystone.** Four of the eight open items (#73, #74, #75, and the
-install half of #67) are blocked on packaging existing — as is the Electron
-smoke job that would close most of what's still unverified.
+**#66 is the keystone.** Four items (#73, #74, #75, and the install half of
+#67) are blocked on packaging existing — as is the Electron smoke job that
+would close most of what's still unverified.
+
+**But the dependency upgrade comes first.** Electron is eleven majors behind
+(33 vs 44) with seven high-severity advisories open, including a context
+isolation bypass — which voids the exact guarantee the README makes about the
+renderer. Shipping signed installers on that runtime would mean shipping the
+bypass to every user and re-shipping later. See "Runtime upgrade" below.
+
+**If you want the best value-per-hour item instead, it's #76** (pre-warm
+worktrees): it's small, measurable, and speeds up the most repeated interaction
+in the app.
 
 ---
 
@@ -155,6 +165,94 @@ Once there are real numbers, look at:
 
 Blocked on #66. Ties into #74.
 
+### #76 · Pre-warm worktrees
+
+Emdash cut task startup from 5 s to 500–1000 ms by creating worktrees in the
+background before they're needed. Vibe has the same cost in the same place:
+`createWorktree` does a `worktree remove` → `branch -D` → `worktree add`
+synchronously when you assign a task, and the user waits through it.
+
+Not a pure copy, because of how we name branches. `createWorktree` takes a
+`taskSlug` and creates `vibe/<agent>/<slug>` in the same `worktree add -b`
+call, so a pre-warmed worktree can't know its branch name yet. Two ways out:
+add the worktree detached and create the branch at assignment, or warm it on a
+placeholder branch and `git branch -m` when the task arrives.
+
+Cheap, measurable, and it improves the single most repeated interaction in the
+app. Best value-per-hour item on this list.
+
+### #77 · Pull work in from an issue tracker
+
+Emdash ingests from Linear, GitHub, Jira, GitLab, Asana, Featurebase,
+Monday.com, Forgejo and Plain — you send a ticket at an agent and it starts.
+
+For Vibe, GitHub Issues alone is most of the value and the least work: an issue
+becomes a Task card, keeping `.vibe/tasks.json` as the single board. Worth
+deciding early whether an imported card keeps a link back to the issue and
+syncs status, or is a one-way import. One-way is much simpler and probably
+enough.
+
+### #78 · Pull requests and CI from inside Vibe
+
+Today merging is local-only: agent branch → main on your machine. Emdash
+creates PRs, shows CI checks, and merges from one view.
+
+This pairs with the CI we now run. Shape: after `awaiting_merge`, offer
+"create PR" beside "merge", then surface check status on the agent card so a
+red build is visible where the work happened. `gh` is already a reasonable
+dependency to lean on rather than implementing the GitHub API.
+
+### #79 · Run external CLI agents alongside native ones
+
+The strategic one — see the Emdash notes below. Vibe implements its own agent
+loop; Emdash drives the CLIs you already have (Claude Code, Codex, Cursor,
+OpenCode, Amp, Devin, Qwen, Droid, Copilot, among others) and owns no loop at
+all.
+
+The interesting position is *both*: native agents keep the zero-cost path
+working with free OpenRouter models or Ollama, and an external-agent mode lets
+someone point their existing Claude Code subscription at the same worktree and
+merge UI. Neither tool offers that today.
+
+Worth stealing specifically: Emdash detects installed provider CLIs
+automatically, and installs marker-tagged lifecycle hooks into their config so
+it gets progress, notifications and resumable sessions — hooks that stay inert
+when the agent runs outside Emdash. That's a well-mannered integration pattern
+and better than screen-scraping a terminal.
+
+This supersedes the vague "ACP support" line that used to sit in the README
+roadmap.
+
+### #80 · Make the board and agent state scale
+
+An Emdash user reported significant UI lag at 78 tasks. Vibe will hit this
+sooner: `TasksView` re-filters the whole task array once per column on every
+render and nothing is virtualized, and every task mutation rewrites the whole
+of `tasks.json`.
+
+Two halves, and they deserve different answers:
+
+- **The board** — memoize the per-column partition, virtualize long columns.
+  Straightforward.
+- **Runtime state** (`.vibe/agents/*.json`, the cost ledger) — Emdash uses
+  SQLite. Tempting, but **do not put `tasks.json` in SQLite**: it being plain
+  JSON in the repo is a deliberate property — the board is diffable and
+  reviewable in a PR. Confine any database to state that's already gitignored.
+
+And a hard constraint learned from their bug reports: Emdash users hit
+`NODE_MODULE_VERSION` mismatch install failures on Windows and Linux, which is
+what a native module costs you. **Every runtime dependency Vibe has today is
+pure JS** — no native modules at all. That's a real asset going into #66
+signed cross-platform builds, and adopting `better-sqlite3` spends it. If the
+ledger needs a database, prefer a pure-JS store or an append-only format (the
+ledger is already JSONL, which is fine for far more than 78 rows).
+
+### #81 · Scheduled and unattended agent runs
+
+Emdash schedules agent work. Vibe only starts an agent when a human clicks.
+The obvious version: run a task at a time, or on a trigger (post-merge, on a
+new issue), and have results waiting. Pairs naturally with #77.
+
 ### Bug · `launch_app` output is lost on Windows
 
 `launchApp` spawns with `detached: true` through `cmd.exe`. On Windows that puts
@@ -186,6 +284,62 @@ Windows with a pointer here — remove that guard as part of the fix.
 
 ---
 
+## Notes from the field · Emdash (YC W26, Apache 2.0)
+
+Reviewed 2026-09-14. [Repo](https://github.com/generalaction/emdash) ·
+[docs](https://docs.emdash.sh/) ·
+[Show HN](https://news.ycombinator.com/item?id=47140322).
+
+The closest thing to a twin Vibe has. Same thesis, almost beat for beat: a
+cross-platform Electron desktop app, many coding agents at once, **one git
+worktree per task**, review the diffs and merge what works, local-first with
+nothing sent to their servers. Convergent design, arrived at independently.
+
+**The one axis where we differ, and it's the important one.** Both projects say
+"provider agnostic" and mean different layers:
+
+|  | Emdash | Vibe |
+|---|---|---|
+| Agent loop | none — drives your installed CLIs | its own |
+| Agnostic about | which *agent CLI* (Claude Code, Codex, Cursor, Amp…) | which *model* (OpenRouter, Anthropic, Ollama…) |
+| What you must already have | a CLI agent, i.e. a paid subscription | an API key, or nothing at all |
+| Inherits agent quality | yes, for free | no — we have to earn it |
+
+That table is the whole strategic picture. Emdash gets Claude Code's harness
+quality for nothing, which is a real advantage and shows up as our "small
+models produce small-model results" caveat in the README. But their floor is a
+paid subscription, whereas Vibe runs on free OpenRouter models or a local
+Ollama for **$0**. The FOSS-first positioning isn't just branding — it's the
+thing they structurally can't match. Sharpen it rather than drift away from it.
+#79 is how we get their advantage too without giving up ours.
+
+**Worth stealing** — filed above as #76 (worktree pre-warming), #77 (issue
+ingestion), #78 (PRs and CI in-app), #79 (external CLI agents), #80 (board and
+state scaling), #81 (scheduling). Their SSH/SFTP remote execution with keychain
+credentials is the shape our long-standing "remote-dev" idea should take; not
+filed yet because it's far out.
+
+**Worth learning from without copying:**
+
+- SQLite cost them `NODE_MODULE_VERSION` install failures on Windows and Linux.
+  See the constraint in #80 — our all-pure-JS dependency tree is worth keeping.
+- A commenter noted that embedding raw terminal windows makes a mobile or web
+  view "a non-starter." Vibe renders structured transcripts, not terminals, so
+  a future browser view stays open to us. Don't trade that away for the
+  convenience of embedding a terminal.
+- They're still working out a business model and floated bundling agent
+  subscriptions. Vibe's answer is already settled and simpler.
+
+**The shared risk, stated plainly.** From the HN thread: *"CLIs themselves are
+getting good at [agent coordination] natively, but that's not provider
+agnostic."* Emdash's founders agreed agents will absorb more orchestration over
+time. The same erosion threatens Vibe. The durable ground is the part a single
+CLI vendor won't build: cross-provider, cross-agent, human-in-the-loop review
+of *parallel* work — the merge/overlap/PM-summary layer, not the chat window.
+Invest there when choosing between two features of equal size.
+
+---
+
 ## Verification owed
 
 Shrinking. `tests/platform.test.ts` now covers `run_bash` and `launch_app`
@@ -206,6 +360,68 @@ branch. What's left genuinely needs a human, or an Electron runtime:
   fallback, because `isEncryptionAvailable()` returns false outside Electron —
   so the path every real user's API keys take is unverified. Needs the Electron
   smoke job below.
+
+---
+
+## Runtime upgrade · Electron 33 → 44 (do before #66)
+
+Scoped 2026-09-14 against the
+[Electron breaking-changes doc](https://www.electronjs.org/docs/latest/breaking-changes).
+
+**Why it can't wait.** Seven high-severity Electron advisories are open, and
+one is a context isolation bypass (`Function.prototype.bind` hijack). Vibe's
+security story is "the renderer has no Node integration, everything crosses
+through `contextBridge`" — that bypass voids precisely that, in an app whose
+renderer displays model-generated content and whose main process runs
+unsandboxed shell commands. The advisory range is
+`<=40.10.2 || 41.x <=41.7.1 || 42.x <=42.3.3`, so **nothing below 43 clears
+it**; npm's fix target is 44.3.0.
+
+**The good news: our Electron surface is tiny.** The whole app imports
+`app`, `BrowserWindow`, `ipcMain`, `dialog`, `Menu`, `shell`, `contextBridge`,
+`ipcRenderer`, `safeStorage`, and the `WebContents` type. Grepped and confirmed
+we use **none** of the APIs behind the scarier changes: no `clipboard`
+(removed from the renderer in 44, rearchitected to Promises), no
+`app.commandLine` (lowercased in 36), no `BrowserView`, no
+`session.setPreloads` (deprecated in 35 — we use `webPreferences.preload`), no
+`webFrame`, `nativeImage`, `systemPreferences` or `desktopCapturer`.
+
+**What actually touches us:**
+
+| Version | Change | Impact |
+|---|---|---|
+| 43 | `dialog` `defaultPath` now defaults to Downloads rather than the last directory | Both `showOpenDialog` calls (the workspace picker) — the picker will open in Downloads. Fix: pass `defaultPath` explicitly. ~10 lines. |
+| 35 | `defaultPath` unsupported on Linux without xdg-portal v4+ | Same picker, degrades on older Linux |
+| 34 | Menu bar hidden during fullscreen on Windows | Interacts with our deliberate `autoHideMenuBar: false` and the menu-bar item under "Verification owed" |
+| 38 | Wayland by default, GTK 4 on GNOME | Rendering risk on Linux — a platform nobody has run Vibe on yet |
+| 38, 44 | macOS floor rises to Ventura; 32-bit Windows and Linux ARM binaries dropped | Sets #66's target list and the README's stated requirements |
+| 42 | Electron no longer self-downloads via postinstall | Install/CI behaviour; watch the `npm ci` step |
+
+`safeStorage` and `Menu` construction have **no breaking changes listed across
+34–44**, which is the best available news for the two areas with no test
+coverage. "Nothing listed" is not "nothing changed", though, and safeStorage
+remains unverified on every platform — so treat the first packaged build as the
+moment to confirm a key actually round-trips.
+
+**The toolchain moves with it**, and this is where the real risk sits:
+
+- `electron-vite` 2.3 → 5.0
+- `vite` 5.4 → **7**, not 8. The advisory needs `>6.4.2`, and electron-vite 5
+  peers `^5 || ^6 || ^7` — vite 8 is outside it.
+- `@vitejs/plugin-react` to whatever pairs with vite 7.
+
+**Separately, and awkwardly: `monaco-editor`.** Versions `>=0.54` bundle a
+vulnerable `dompurify` (four moderate XSS advisories). npm's suggested fix is
+to *downgrade* 0.56 → 0.53. Monaco renders workspace file content in the Files
+tab, so it isn't purely theoretical. Don't fold this into the Electron bump —
+decide it on its own once someone checks whether a patched Monaco has shipped.
+
+**Suggested order:** toolchain first (electron-vite + vite + plugin-react,
+confirm dev and build still work), then Electron in one jump to 44, then fix
+the `dialog` defaultPath, then run the app on all three platforms before
+believing any of it. The CI matrix built this session is what makes an
+eleven-major jump tractable at all — before it, two-thirds of the platforms
+were guesswork.
 
 ---
 
