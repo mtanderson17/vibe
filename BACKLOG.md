@@ -327,10 +327,21 @@ sooner: `TasksView` re-filters the whole task array once per column on every
 render and nothing is virtualized, and every task mutation rewrites the whole
 of `tasks.json`.
 
-Two halves, and they deserve different answers:
+**The board half is done** (2026-09-14) — but the profile was not what the
+Emdash report suggested. Re-filtering the array per column is microseconds; the
+real cost was that TasksView re-renders on every keystroke in the new-task box
+and **every card re-rendered with it**, because the handlers and the shared
+`cardProps` object were rebuilt each render. Fixed by memoizing TaskCard and
+giving it stable callbacks, plus a single-pass `partitionTasks`. TaskCard also
+stopped taking the whole agents map — it now gets a resolved `assignedAgent`,
+and the dropdown rows only go to the one card whose picker is open, so cards no
+longer re-render when an unrelated agent streams. Covered by
+`tests/tasks-board.test.ts` and `tests/tasks-view.test.tsx`.
 
-- **The board** — memoize the per-column partition, virtualize long columns.
-  Straightforward.
+Still open:
+
+- **The board** — virtualize long columns. Not worth it until someone actually
+  has hundreds of cards.
 - **Runtime state** (`.vibe/agents/*.json`, the cost ledger) — Emdash uses
   SQLite. Tempting, but **do not put `tasks.json` in SQLite**: it being plain
   JSON in the repo is a deliberate property — the board is diffable and

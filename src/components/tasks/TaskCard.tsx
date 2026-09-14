@@ -4,19 +4,22 @@
 // which owns the task list and the refresh. `variant` decides the action row —
 // a card's available actions are a function of the column it sits in.
 
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { useSubmitKey } from '../../stores/prefs'
 import type { AgentState, Task } from '../../types'
+import type { AssignOption } from './assign'
 
 export type TaskCardVariant = 'proposed' | 'backlog' | 'in_progress' | 'awaiting_merge' | 'done'
 
 interface Props {
   task: Task
-  agents: Record<string, AgentState | undefined>
-  agentIds: string[]
   variant: TaskCardVariant
-  assignPickerFor: string | null
-  setAssignPickerFor: (id: string | null) => void
+  /** Resolved by the parent, so a card doesn't depend on the whole agents map. */
+  assignedAgent?: AgentState
+  /** Only supplied to the one card whose picker is open. */
+  assignOptions?: AssignOption[]
+  pickerOpen: boolean
+  onOpenPicker: (taskId: string | null) => void
   onRefresh: () => void
   onAssign: (taskId: string, agentId: string) => void
   onDelete: (id: string) => void
@@ -24,9 +27,8 @@ interface Props {
   onMove: (id: string, status: string) => void
 }
 
-export default function TaskCard({
-  task, agents, agentIds, variant,
-  assignPickerFor, setAssignPickerFor,
+function TaskCard({
+  task, variant, assignedAgent, assignOptions, pickerOpen, onOpenPicker,
   onRefresh, onAssign, onDelete, onAcceptProposed, onMove
 }: Props) {
   const [editing, setEditing] = useState(false)
@@ -88,8 +90,6 @@ export default function TaskCard({
     )
   }
 
-  const assignedAgent = task.assignedTo ? agents[task.assignedTo] : undefined
-
   return (
     <div className={cardCls}>
       <div className="task-card-title" onClick={() => setEditing(true)} style={{ cursor: 'text' }} title="Click to edit">
@@ -130,24 +130,22 @@ export default function TaskCard({
         )}
         {variant === 'backlog' && (
           <>
-            {assignPickerFor === task.id ? (
+            {pickerOpen ? (
               <select
                 autoFocus
                 onChange={e => e.target.value && onAssign(task.id, e.target.value)}
-                onBlur={() => setAssignPickerFor(null)}
+                onBlur={() => onOpenPicker(null)}
                 defaultValue=""
               >
                 <option value="" disabled>Assign to…</option>
-                {agentIds.map(id => {
-                  const a = agents[id]
-                  const s = a?.status ?? 'idle'
-                  const busy = s === 'running' || s === 'awaiting_input' || s === 'awaiting_merge'
-                  const label = a?.displayName ? `${a.displayName} (${id})` : id
-                  return <option key={id} value={id} disabled={busy}>{label} {busy ? `· ${s}` : ''}</option>
-                })}
+                {(assignOptions ?? []).map(o => (
+                  <option key={o.id} value={o.id} disabled={o.busy}>
+                    {o.label} {o.busy ? `· ${o.status}` : ''}
+                  </option>
+                ))}
               </select>
             ) : (
-              <button className="primary" onClick={() => setAssignPickerFor(task.id)}>Assign to agent</button>
+              <button className="primary" onClick={() => onOpenPicker(task.id)}>Assign to agent</button>
             )}
             <button onClick={() => setEditing(true)}>Edit</button>
             <button className="danger" onClick={() => onDelete(task.id)}>Delete</button>
@@ -171,3 +169,9 @@ export default function TaskCard({
     </div>
   )
 }
+
+// Memoized: the board re-renders on every keystroke in the new-task box, and
+// without this every card on the board re-rendered with it. Relies on the
+// parent passing stable callbacks and a resolved `assignedAgent` rather than
+// the whole agents map — widening these props back out would silently undo it.
+export default memo(TaskCard)

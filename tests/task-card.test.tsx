@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import TaskCard, { type TaskCardVariant } from '../src/components/tasks/TaskCard'
+import { assignOptionsFor } from '../src/components/tasks/assign'
 import { usePrefs } from '../src/stores/prefs'
 import type { AgentState, Task } from '../src/types'
 
@@ -33,8 +34,8 @@ function mount(variant: TaskCardVariant, t: Task, extra: Record<string, unknown>
       variant={variant}
       agents={{}}
       agentIds={[]}
-      assignPickerFor={null}
-      setAssignPickerFor={noop}
+      pickerOpen={false}
+      onOpenPicker={noop}
       onRefresh={noop}
       onAssign={noop}
       onDelete={noop}
@@ -94,7 +95,7 @@ test('a proposed card hides assignment metadata and the add-description affordan
   const restore = stubVibe({})
   try {
     mount('proposed', task({ proposed: true, assignedTo: 'agent-1', branch: 'vibe/agent-1' }), {
-      agents: { 'agent-1': agent({ displayName: 'Scout' }) },
+      assignedAgent: agent({ displayName: 'Scout' }),
       onAcceptProposed: () => {}
     })
     assert.equal(screen.queryByText('+ add description'), null)
@@ -107,7 +108,7 @@ test('an assigned card shows the agent display name and branch', () => {
   const restore = stubVibe({})
   try {
     mount('in_progress', task({ status: 'in_progress', assignedTo: 'agent-1', branch: 'vibe/agent-1' }), {
-      agents: { 'agent-1': agent({ displayName: 'Scout', status: 'running' }) }
+      assignedAgent: agent({ displayName: 'Scout', status: 'running' })
     })
     assert.ok(screen.getByText('Scout'))
     assert.ok(screen.getByText('vibe/agent-1'))
@@ -117,7 +118,7 @@ test('an assigned card shows the agent display name and branch', () => {
 test('an assigned card falls back to the agent id when there is no display name', () => {
   const restore = stubVibe({})
   try {
-    mount('in_progress', task({ status: 'in_progress', assignedTo: 'agent-7' }), { agents: {} })
+    mount('in_progress', task({ status: 'in_progress', assignedTo: 'agent-7' }), {})
     assert.ok(screen.getByText('agent-7'))
   } finally { cleanup(); restore() }
 })
@@ -126,12 +127,11 @@ test('the assign picker disables agents that are already busy', () => {
   const restore = stubVibe({})
   try {
     mount('backlog', task(), {
-      assignPickerFor: 'task-1',
-      agentIds: ['agent-1', 'agent-2'],
-      agents: {
+      pickerOpen: true,
+      assignOptions: assignOptionsFor(['agent-1', 'agent-2'], {
         'agent-1': agent({ id: 'agent-1', status: 'idle' }),
         'agent-2': agent({ id: 'agent-2', status: 'running' })
-      }
+      })
     })
     const options = screen.getAllByRole('option') as HTMLOptionElement[]
     const byValue = Object.fromEntries(options.map(o => [o.value, o.disabled]))

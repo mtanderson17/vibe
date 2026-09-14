@@ -4,11 +4,12 @@
 // This component owns the task list and every mutation of it; TaskCard and
 // PmPanel are presentational-ish children that call back up here to refresh.
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useAgents } from './stores/agents'
 import { useSubmitKey } from './stores/prefs'
 import TaskCard, { type TaskCardVariant } from './components/tasks/TaskCard'
 import PmPanel from './components/tasks/PmPanel'
+import { assignOptionsFor, partitionTasks } from './components/tasks/assign'
 import type { Task } from './types'
 
 interface Props { agentIds: string[] }
@@ -44,33 +45,48 @@ export default function TasksView({ agentIds }: Props) {
     refresh()
   }
 
-  async function moveTask(id: string, status: string) {
+  // These are handed to memoized TaskCards, so they have to keep a stable
+  // identity or the memo does nothing.
+  const moveTask = useCallback(async (id: string, status: string) => {
     await window.vibe.tasks.update(id, { status })
     refresh()
-  }
+  }, [refresh])
 
-  async function del(id: string) {
+  const del = useCallback(async (id: string) => {
     await window.vibe.tasks.delete(id)
     refresh()
-  }
+  }, [refresh])
 
-  async function assign(taskId: string, agentId: string) {
+  const assign = useCallback(async (taskId: string, agentId: string) => {
     setAssignPickerFor(null)
     await window.vibe.tasks.assignToAgent(taskId, agentId)
     refresh()
-  }
+  }, [refresh])
 
-  async function acceptProposed(id: string) {
+  const acceptProposed = useCallback(async (id: string) => {
     await window.vibe.tasks.update(id, { proposed: false })
     refresh()
-  }
+  }, [refresh])
 
-  const proposed = tasks.filter(t => t.proposed)
+  // One pass instead of a filter per column on every render.
+  const columns = useMemo(
+    () => partitionTasks(tasks, COLUMNS.map(c => c.key)),
+    [tasks]
+  )
 
-  // Shared by the proposed row and every kanban column.
-  const cardProps = {
-    agents, agentIds, assignPickerFor, setAssignPickerFor,
-    onRefresh: refresh, onAssign: assign, onDelete: del, onMove: moveTask
+  // Only the card with an open picker needs these, so only it depends on the
+  // agents map — every other card stays memoized while agents stream.
+  const assignOptions = useMemo(
+    () => (assignPickerFor ? assignOptionsFor(agentIds, agents) : undefined),
+    [assignPickerFor, agentIds, agents]
+  )
+
+  const cardHandlers = {
+    onOpenPicker: setAssignPickerFor,
+    onRefresh: refresh,
+    onAssign: assign,
+    onDelete: del,
+    onMove: moveTask
   }
 
   return (
@@ -118,19 +134,22 @@ export default function TasksView({ agentIds }: Props) {
         <strong>Proposed tasks</strong> come from the PM agent — accept to move to backlog, or dismiss.
       </div>
 
-      {proposed.length > 0 && (
+      {columns.proposed.length > 0 && (
         <div className="proposed-row">
           <div className="proposed-header">
-            🤖 Proposed by PM agent ({proposed.length})
+            🤖 Proposed by PM agent ({columns.proposed.length})
           </div>
           <div className="proposed-cards">
-            {proposed.map(t => (
+            {columns.proposed.map(t => (
               <TaskCard
                 key={t.id}
                 task={t}
                 variant="proposed"
+                assignedAgent={t.assignedTo ? agents[t.assignedTo] : undefined}
+                pickerOpen={assignPickerFor === t.id}
+                assignOptions={assignPickerFor === t.id ? assignOptions : undefined}
                 onAcceptProposed={acceptProposed}
-                {...cardProps}
+                {...cardHandlers}
               />
             ))}
           </div>
@@ -139,7 +158,7 @@ export default function TasksView({ agentIds }: Props) {
 
       <div className="kanban">
         {COLUMNS.map(col => {
-          const colTasks = tasks.filter(t => t.status === col.key && !t.proposed)
+          const colTasks = columns[col.key]
           return (
             <div key={col.key} className="kanban-col">
               <div className="kanban-col-header">
@@ -147,7 +166,15 @@ export default function TasksView({ agentIds }: Props) {
               </div>
               <div className="kanban-col-body">
                 {colTasks.map(t => (
-                  <TaskCard key={t.id} task={t} variant={col.key} {...cardProps} />
+                  <TaskCard
+                    key={t.id}
+                    task={t}
+                    variant={col.key}
+                    assignedAgent={t.assignedTo ? agents[t.assignedTo] : undefined}
+                    pickerOpen={assignPickerFor === t.id}
+                    assignOptions={assignPickerFor === t.id ? assignOptions : undefined}
+                    {...cardHandlers}
+                  />
                 ))}
                 {colTasks.length === 0 && <div className="kanban-empty">— empty —</div>}
               </div>
