@@ -11,9 +11,11 @@ interface Props {
   open: boolean
   onClose: () => void
   onCreated?: () => void
+  /** False when no project is open — tasks.create() would throw "No workspace". */
+  hasWorkspace: boolean
 }
 
-export default function NewTaskModal({ open, onClose, onCreated }: Props) {
+export default function NewTaskModal({ open, onClose, onCreated, hasWorkspace }: Props) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [saving, setSaving] = useState(false)
@@ -46,7 +48,7 @@ export default function NewTaskModal({ open, onClose, onCreated }: Props) {
   if (!open) return null
 
   async function submit() {
-    if (!title.trim()) return
+    if (!title.trim() || !hasWorkspace) return
     setSaving(true)
     setError(null)
     try {
@@ -67,12 +69,17 @@ export default function NewTaskModal({ open, onClose, onCreated }: Props) {
           <button onClick={onClose} style={{ fontSize: 11, padding: '3px 10px' }}>Close</button>
         </div>
         <div className="new-task-body">
+          {!hasWorkspace && (
+            <div className="new-task-error">
+              Open a project first — tasks live in the project’s <code>.vibe/tasks.json</code>.
+            </div>
+          )}
           <input
             ref={titleRef}
             value={title}
             onChange={e => setTitle(e.target.value)}
             onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
+              if (submitKey.isSubmit(e)) { e.preventDefault(); submit() }
             }}
             placeholder="Task title…"
             className="new-task-title"
@@ -94,7 +101,7 @@ export default function NewTaskModal({ open, onClose, onCreated }: Props) {
           <button
             className="primary"
             onClick={submit}
-            disabled={!title.trim() || saving}
+            disabled={!title.trim() || saving || !hasWorkspace}
           >
             {saving ? 'Creating…' : 'Create task'}
           </button>

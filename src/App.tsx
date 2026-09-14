@@ -350,6 +350,7 @@ export default function App() {
       <NewTaskModal
         open={newTaskOpen}
         onClose={() => setNewTaskOpen(false)}
+        hasWorkspace={!!config.workspacePath}
       />
 
       {approvals.length > 0 && (

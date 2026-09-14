@@ -23,16 +23,24 @@ export const usePrefs = create<PrefsStore>((set) => ({
   }
 }))
 
-// Hook that returns a submit-key matcher + a hint string for placeholders,
-// based on the current preference. `isSubmit(e)` returns true if the event
-// should trigger a form submit.
-const isMac = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac')
+// Minimal shape both React's synthetic event and a raw KeyboardEvent satisfy,
+// so the matcher can be unit-tested without a DOM.
+export interface SubmitKeyEvent {
+  key: string
+  shiftKey: boolean
+  metaKey: boolean
+  ctrlKey: boolean
+  altKey: boolean
+}
 
-export function useSubmitKey(): {
-  isSubmit: (e: React.KeyboardEvent | KeyboardEvent) => boolean
+export interface SubmitKey {
+  isSubmit: (e: SubmitKeyEvent) => boolean
   hint: string
-} {
-  const submitOnEnter = usePrefs(s => s.submitOnEnter)
+}
+
+// Pure form of the preference -> matcher mapping. Exported for tests; the hook
+// below is the thing components use.
+export function submitKeyFor(submitOnEnter: boolean, isMac: boolean): SubmitKey {
   if (submitOnEnter) {
     return {
       isSubmit: (e) => e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey,
@@ -43,4 +51,14 @@ export function useSubmitKey(): {
     isSubmit: (e) => e.key === 'Enter' && (e.metaKey || e.ctrlKey),
     hint: `${isMac ? '⌘' : 'Ctrl'}+Enter to send`
   }
+}
+
+const isMac = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac')
+
+// Hook that returns a submit-key matcher + a hint string for placeholders,
+// based on the current preference. `isSubmit(e)` returns true if the event
+// should trigger a form submit.
+export function useSubmitKey(): SubmitKey {
+  const submitOnEnter = usePrefs(s => s.submitOnEnter)
+  return submitKeyFor(submitOnEnter, isMac)
 }
