@@ -235,6 +235,50 @@ makes it the likely winner. This supersedes the vague "ACP support" line that
 used to sit in the README roadmap — it's now the concrete mechanism for this
 item.
 
+### Feasibility: verified against the installed Claude Code CLI, 2026-09-14
+
+Tested directly rather than reasoned about. **The answer is yes** — every
+integration point Vibe needs is exposed, and the initial pessimistic read of
+this item was mostly wrong.
+
+| What Vibe needs | Verdict | Mechanism |
+|---|---|---|
+| Token + cost accounting | **Better than ours** | see below |
+| Vibe owns the permission gate | **Yes** | `--permission-prompts host` (the default) and a hidden but accepted `--permission-prompt-tool` |
+| Constrain what the agent may do | **Yes, allowlist only** | `--restricted`, `--allowedTools`, `--tools` — see the finding below |
+| Inject project.md / summary.md / siblings | **Yes** | `--append-system-prompt`, `--system-prompt` |
+| Pass through `.vibe/mcp.json` | **Yes** | `--mcp-config` + `--strict-mcp-config` |
+| Model chain with fallback | **Built in** | `--fallback-model` takes a comma-separated list tried in order — our own concept, already implemented |
+| Multi-turn follow-ups | **Yes** | `--input-format stream-json`, `--replay-user-messages` |
+| Session continuity | **Yes** | `--session-id` (we supply the UUID), `--resume`, `--fork-session` |
+| Run in *our* worktree | **Yes** | cwd + `--add-dir`; ignore its own `-w/--worktree` |
+| Live progress for the UI | **Yes** | stream-json `assistant` events, `--include-partial-messages`, `--include-hook-events` |
+| Spend cap | **Better than ours** | `--max-budget-usd`, which we have no equivalent of |
+
+Genuinely lost: `tools.ts` (the CLI brings its own — fine) . Replaced rather
+than broken: the condenser (`--autocompact`) and the `maxSteps` budget
+(`--max-budget-usd` is a better primitive anyway).
+
+**Security finding — use allowlists, never denylists.** Asked to run a shell
+command with `--disallowed-tools Bash PowerShell`, the CLI removed those tools
+and the model **routed around the block** via another tool that also executes
+commands, running the command anyway. `permission_denials` stayed empty,
+because nothing was formally denied — it simply took a different path. Under
+`--restricted` the same prompt was refused outright: *"I don't have a way to
+directly run a shell command here."*
+
+A denylist of tool names is therefore not a boundary. The tool surface is wide
+and several tools can execute code, which is exactly why `--restricted` exists
+to remove the whole class. This is the same lesson `approval.ts` already
+records about pattern-matching commands — it generalises. Any backend we add
+must be constrained by allowlist.
+
+Worth knowing: the CLI ships its own background agent manager (`claude --bg`,
+`claude agents`, `attach`, `logs`, `stop`, `rm`, `respawn`), which overlaps
+Vibe's Control Center. Not a blocker, but the boundary needs deciding — we
+should drive sessions ourselves rather than delegate to its manager, or the two
+models of "what is running" will diverge.
+
 **Cost tracking survives the swap — verified, not assumed.** The obvious
 objection to running someone else's harness is that we stop seeing token usage
 and the Cost screen goes dark for those agents. That turns out to be false for
