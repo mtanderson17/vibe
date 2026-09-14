@@ -29,7 +29,15 @@ test('resolveInside: strips leading slashes so absolute-looking rels stay inside
 test('resolveInside: strips leading backslashes too (Windows-style)', () => {
   const root = path.resolve('/tmp/workspace')
   const abs = resolveInside(root, '\\also\\rooted.ts')
-  assert.equal(abs, path.resolve(root, 'also/rooted.ts'))
+
+  // The guarantee that holds everywhere: a backslash-rooted path is treated as
+  // relative and stays inside the workspace. What the *inner* backslashes mean
+  // is platform-specific — separators on Windows, ordinary filename characters
+  // on POSIX — so only assert the exact path on the platform that defines it.
+  assert.ok(abs.startsWith(root + path.sep), `${abs} should be inside ${root}`)
+  if (process.platform === 'win32') {
+    assert.equal(abs, path.resolve(root, 'also/rooted.ts'))
+  }
 })
 
 test('resolveInside: rejects .. traversal', () => {

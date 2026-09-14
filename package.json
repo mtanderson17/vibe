@@ -8,7 +8,7 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test": "node --import tsx --test \"tests/**/*.test.ts\" \"tests/**/*.test.tsx\"",
+    "test": "node scripts/run-tests.mjs",
     "build:icons": "node scripts/build-icons.mjs"
   },
   "dependencies": {

@@ -110,7 +110,12 @@ definition.
 
 ## Tests
 
-`node --test` via `tsx` — no test framework dependency.
+`node --test` via `tsx` — no test framework dependency. `npm test` goes through
+`scripts/run-tests.mjs`, which walks `tests/` and hands node explicit file
+paths; extra args are forwarded, so `npm test -- --test-name-pattern=merge`
+works. The script exists because nothing expands a `tests/**/*.test.ts` glob
+consistently — POSIX `sh` expands `**` like `*`, GitHub's Windows runner uses
+pwsh which doesn't expand it at all, and node only globs on v22+.
 
 - Pure logic (`tests/*.test.ts`) — tools, condenser, ledger, git parsing,
   config migration, keybinding resolution, the provider catalogue.
@@ -118,6 +123,10 @@ definition.
   Import `tests/helpers/dom.ts` **first**; it registers the browser globals
   before React is evaluated and installs a `window.vibe` stub that each test
   overrides per namespace.
+
+Tests that assert platform-specific behaviour (path separators, shell quoting)
+must guard on `process.platform` — CI runs the suite on all three, and a test
+that only holds on one will break the other two.
 
 One sharp edge: `tsx` only applies a tsconfig's `compilerOptions` to files that
 config's `include` matches. The root `tsconfig.json` therefore carries
