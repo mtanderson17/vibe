@@ -1,5 +1,12 @@
-import { useEffect, useState, useMemo, memo, useCallback, lazy, Suspense } from 'react'
-import type { Config } from './types'
+// App shell: owns the top-level view state (which screen, which agent is
+// focused, which modal is open) and wires the main-process bridges — config,
+// agent events, approvals, workspace switches.
+//
+// Anything with more shape than that lives elsewhere: the menu/palette command
+// lists are in src/hooks, the pieces of chrome are in src/components.
+
+import { useEffect, useState, useMemo, useCallback, lazy, Suspense } from 'react'
+import type { Config, SidebarView } from './types'
 import { useAgents } from './stores/agents'
 import Setup from './Setup'
 import AgentPanel from './AgentPanel'
@@ -10,22 +17,18 @@ import CostView from './CostView'
 const FilesView = lazy(() => import('./FilesView'))
 import TasksView from './TasksView'
 import ControlCenter from './ControlCenter'
-import Icon, { type IconName } from './Icon'
-import CommandPalette, { type Command } from './components/CommandPalette'
+import Icon from './Icon'
+import CommandPalette from './components/CommandPalette'
 import ShortcutsModal from './components/ShortcutsModal'
 import ErrorBoundary from './components/ErrorBoundary'
 import NewTaskModal from './components/NewTaskModal'
+import SidebarItem from './components/SidebarItem'
+import AgentTab from './components/AgentTab'
+import ApprovalModal, { type ApprovalReq } from './components/ApprovalModal'
+import { useMenuCommands } from './hooks/useMenuCommands'
+import { useCommands } from './hooks/useCommands'
 import { usePrefs } from './stores/prefs'
 import vibeLogo from './assets/vibe-logo.webp'
-
-type SidebarView = 'control' | 'tasks' | 'files' | 'cost' | 'context' | 'settings'
-
-interface ApprovalReq {
-  id: string
-  agentId: string
-  command: string
-  reason: string
-}
 
 export default function App() {
   const [config, setConfig] = useState<Config | null>(null)
@@ -72,14 +75,18 @@ export default function App() {
     return off
   }, [])
 
-  // All keybindings are wired via the app menu (see menu.ts + keybindings.ts).
-  // The menu delivers each command as an IPC message the renderer handles in
-  // onMenuCommand below. This means user overrides apply automatically.
+  // Reload the app when workspace switches — cheapest way to reset all view state
+  useEffect(() => {
+    const off = window.vibe.onWorkspaceSwitched(() => {
+      window.location.reload()
+    })
+    return off
+  }, [])
 
-  async function respondApproval(id: string, approved: boolean) {
+  const respondApproval = useCallback(async (id: string, approved: boolean) => {
     setApprovals(prev => prev.filter(a => a.id !== id))
     await window.vibe.approval.respond(id, approved)
-  }
+  }, [])
 
   const agentIds = useMemo(() => {
     return Object.keys(agentSummaries).sort((a, b) => {
@@ -91,15 +98,15 @@ export default function App() {
 
   const atAgentCap = agentIds.length >= (config?.agentCount ?? 4)
 
-  async function handleSpawn() {
+  const spawnAgent = useCallback(async () => {
     if (atAgentCap) return
     const newAgent = await window.vibe.agents.spawn()
     addAgent(newAgent)
     setFocusedAgent(newAgent.id)
     setSidebarView('control')
-  }
+  }, [atAgentCap, addAgent])
 
-  const handleClose = useCallback(async (id: string) => {
+  const closeAgent = useCallback(async (id: string) => {
     const a = agentSummaries[id]
     if (a && a.status !== 'idle') {
       if (!confirm(`Close ${id}? Any in-flight work, worktree, and branch will be cleaned up.`)) return
@@ -109,134 +116,20 @@ export default function App() {
     window.vibe.agents.close(id).catch(err => console.error('[vibe] close failed', err))
   }, [agentSummaries, focusedAgent, removeAgent])
 
-  const handleFocus = useCallback((id: string) => setFocusedAgent(id), [])
+  const openNewTask = useCallback(() => setNewTaskOpen(true), [])
+  const openShortcuts = useCallback(() => setShortcutsOpen(true), [])
+  const togglePalette = useCallback(() => setPaletteOpen(prev => !prev), [])
 
-  // Menu commands (from the native app menu). Placed after agentIds/handleClose/handleSpawn
-  // declarations to satisfy TDZ in the closure.
-  useEffect(() => {
-    const off = window.vibe.onMenuCommand((channel, ...args) => {
-      switch (channel) {
-        case 'menu:new-agent':      handleSpawn(); break
-        case 'menu:new-task':       setNewTaskOpen(true); break
-        case 'menu:close-agent':    if (focusedAgent) handleClose(focusedAgent); break
-        case 'menu:settings':       setSidebarView('settings'); break
-        case 'menu:view': {
-          const view = args[0] as SidebarView
-          setSidebarView(view); setFocusedAgent(null); break
-        }
-        case 'menu:focus-next': {
-          const cur = agentIds.indexOf(focusedAgent ?? '')
-          if (agentIds.length) { setSidebarView('control'); setFocusedAgent(agentIds[(cur + 1) % agentIds.length]) }
-          break
-        }
-        case 'menu:focus-prev': {
-          const cur = agentIds.indexOf(focusedAgent ?? '')
-          if (agentIds.length) {
-            setSidebarView('control')
-            setFocusedAgent(agentIds[(cur - 1 + agentIds.length) % agentIds.length])
-          }
-          break
-        }
-        case 'menu:stop-current':
-          if (focusedAgent) window.vibe.agents.kill(focusedAgent)
-          break
-        case 'menu:pm-regenerate': window.vibe.pm.run('manual'); break
-        case 'menu:shortcuts':     setShortcutsOpen(true); break
-        case 'menu:palette':       setPaletteOpen(prev => !prev); break
-        case 'menu:open-project': {
-          const path = typeof args[0] === 'string' ? args[0] as string : undefined
-          window.vibe.workspace.switch(path).catch(err => console.error('[vibe] open project failed', err))
-          break
-        }
-      }
-    })
-    return off
-  }, [agentIds, focusedAgent, handleClose, handleSpawn])
+  // Keybindings all arrive as menu commands — see useMenuCommands for why.
+  useMenuCommands({
+    agentIds, focusedAgent, spawnAgent, closeAgent,
+    setSidebarView, setFocusedAgent, openNewTask, openShortcuts, togglePalette
+  })
 
-  // Reload the app when workspace switches — cheapest way to reset all view state
-  useEffect(() => {
-    const off = window.vibe.onWorkspaceSwitched(() => {
-      window.location.reload()
-    })
-    return off
-  }, [])
-
-  const commands: Command[] = useMemo(() => {
-    const cmds: Command[] = []
-
-    // Views
-    cmds.push({ id: 'view.control', label: 'Go to Control Center', group: 'Navigate', run: () => { setSidebarView('control'); setFocusedAgent(null) } })
-    cmds.push({ id: 'view.tasks',   label: 'Go to Tasks',          group: 'Navigate', run: () => { setSidebarView('tasks'); setFocusedAgent(null) } })
-    cmds.push({ id: 'view.files',   label: 'Go to Files',          group: 'Navigate', run: () => { setSidebarView('files'); setFocusedAgent(null) } })
-    cmds.push({ id: 'view.cost',    label: 'Go to Cost',           group: 'Navigate', run: () => { setSidebarView('cost'); setFocusedAgent(null) } })
-    cmds.push({ id: 'view.context', label: 'Go to Context',        group: 'Navigate', run: () => { setSidebarView('context'); setFocusedAgent(null) } })
-    cmds.push({ id: 'view.settings', label: 'Open Settings',       group: 'Navigate', run: () => setSidebarView('settings') })
-
-    // Per-agent commands
-    for (const id of agentIds) {
-      const a = agentSummaries[id]
-      const label = a?.displayName || id
-      cmds.push({
-        id: `focus.${id}`,
-        label: `Focus ${label}`,
-        hint: a?.status ? `Status: ${a.status}` : undefined,
-        group: 'Agents',
-        run: () => { setSidebarView('control'); setFocusedAgent(id) }
-      })
-      if (a?.status === 'running') {
-        cmds.push({
-          id: `kill.${id}`,
-          label: `Stop ${label}`,
-          group: 'Agents',
-          run: () => { window.vibe.agents.kill(id) }
-        })
-      }
-      cmds.push({
-        id: `close.${id}`,
-        label: `Close ${label}`,
-        hint: 'removes worktree + branch',
-        group: 'Agents',
-        run: () => handleClose(id)
-      })
-    }
-
-    // Spawn
-    if (!atAgentCap) {
-      cmds.push({ id: 'spawn', label: 'New agent', group: 'Agents', run: handleSpawn })
-    }
-
-    // Tasks
-    cmds.push({ id: 'task.new', label: 'New task…', group: 'Tasks', run: () => setNewTaskOpen(true) })
-
-    // PM
-    cmds.push({ id: 'pm.regenerate', label: 'Regenerate project summary (PM)', group: 'PM', run: () => { window.vibe.pm.run('manual') } })
-    cmds.push({ id: 'pm.clear', label: 'Clear PM chat', group: 'PM', run: () => { window.vibe.pm.clear() } })
-
-    // Project switcher
-    cmds.push({
-      id: 'project.open',
-      label: 'Open project…',
-      hint: `${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+O`,
-      group: 'Project',
-      run: () => { window.vibe.workspace.switch() }
-    })
-    for (const path of (config?.recentWorkspaces ?? []).slice(0, 8)) {
-      if (path === config?.workspacePath) continue
-      const short = path.split(/[\\/]/).slice(-2).join('/')
-      cmds.push({
-        id: `project.open.${path}`,
-        label: `Open recent: ${short}`,
-        hint: path,
-        group: 'Project',
-        run: () => { window.vibe.workspace.switch(path) }
-      })
-    }
-
-    // Help
-    cmds.push({ id: 'help.shortcuts', label: 'Show keyboard shortcuts', hint: `${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+/`, group: 'Help', run: () => setShortcutsOpen(true) })
-
-    return cmds
-  }, [agentIds, agentSummaries, atAgentCap, handleClose, handleSpawn, config])
+  const commands = useCommands({
+    agentIds, agentSummaries, atAgentCap, config,
+    spawnAgent, closeAgent, setSidebarView, setFocusedAgent, openNewTask, openShortcuts
+  })
 
   if (!config) return null
 
@@ -257,6 +150,8 @@ export default function App() {
     />
   }
 
+  const goTo = (view: SidebarView) => () => { setSidebarView(view); setFocusedAgent(null) }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -264,11 +159,11 @@ export default function App() {
           <img src={vibeLogo} alt="Vibe" />
         </div>
         <div className="sidebar-nav">
-          <SidebarItem icon="grid" label="Control Center" active={sidebarView === 'control'} onClick={() => { setSidebarView('control'); setFocusedAgent(null) }} />
-          <SidebarItem icon="list" label="Tasks" active={sidebarView === 'tasks'} onClick={() => { setSidebarView('tasks'); setFocusedAgent(null) }} />
-          <SidebarItem icon="note" label="Files" active={sidebarView === 'files'} onClick={() => { setSidebarView('files'); setFocusedAgent(null) }} />
-          <SidebarItem icon="coin" label="Cost" active={sidebarView === 'cost'} onClick={() => { setSidebarView('cost'); setFocusedAgent(null) }} />
-          <SidebarItem icon="note" label="Context" active={sidebarView === 'context'} onClick={() => { setSidebarView('context'); setFocusedAgent(null) }} />
+          <SidebarItem icon="grid" label="Control Center" active={sidebarView === 'control'} onClick={goTo('control')} />
+          <SidebarItem icon="list" label="Tasks"          active={sidebarView === 'tasks'}   onClick={goTo('tasks')} />
+          <SidebarItem icon="note" label="Files"          active={sidebarView === 'files'}   onClick={goTo('files')} />
+          <SidebarItem icon="coin" label="Cost"           active={sidebarView === 'cost'}    onClick={goTo('cost')} />
+          <SidebarItem icon="note" label="Context"        active={sidebarView === 'context'} onClick={goTo('context')} />
         </div>
         <div className="sidebar-footer">
           <button onClick={() => setSidebarView('settings')} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
@@ -295,13 +190,13 @@ export default function App() {
                   key={id}
                   id={id}
                   active={focusedAgent === id}
-                  onFocus={handleFocus}
-                  onClose={handleClose}
+                  onFocus={setFocusedAgent}
+                  onClose={closeAgent}
                 />
               ))}
               <button
                 className="agent-tab-add"
-                onClick={handleSpawn}
+                onClick={spawnAgent}
                 disabled={atAgentCap}
                 title={atAgentCap ? `Reached max of ${config.agentCount} agents (change in Settings)` : 'Add agent'}
                 style={{ display: 'flex', alignItems: 'center', gap: 6 }}
@@ -320,8 +215,8 @@ export default function App() {
                 : <ControlCenter
                     agentIds={agentIds}
                     onFocus={setFocusedAgent}
-                    onSpawn={handleSpawn}
-                    onClose={handleClose}
+                    onSpawn={spawnAgent}
+                    onClose={closeAgent}
                     atCap={atAgentCap}
                     maxAgents={config.agentCount}
                   />
@@ -352,64 +247,7 @@ export default function App() {
         onClose={() => setNewTaskOpen(false)}
         hasWorkspace={!!config.workspacePath}
       />
-
-      {approvals.length > 0 && (
-        <div className="approval-overlay">
-          <div className="approval-modal">
-            <div className="approval-header">
-              <span className="status-dot status-error" />
-              <strong>Command requires approval</strong>
-            </div>
-            <div className="approval-body">
-              <div style={{ fontSize: 12, color: 'var(--fg-dim)' }}>
-                <strong>{approvals[0].agentId}</strong> wants to run — reason: {approvals[0].reason}
-              </div>
-              <pre className="approval-command">{approvals[0].command}</pre>
-              <div style={{ fontSize: 11, color: 'var(--fg-dim)', marginTop: 8 }}>
-                {approvals.length > 1 && `+ ${approvals.length - 1} more waiting`}
-              </div>
-            </div>
-            <div className="approval-actions">
-              <button onClick={() => respondApproval(approvals[0].id, false)}>Deny</button>
-              <button className="primary" onClick={() => respondApproval(approvals[0].id, true)}>Allow this once</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Each tab subscribes only to its own agent's status. When another agent streams,
-// this tab doesn't re-render.
-const AgentTab = memo(function AgentTab({
-  id, active, onFocus, onClose
-}: { id: string; active: boolean; onFocus: (id: string) => void; onClose: (id: string) => void }) {
-  const agent = useAgents(s => s.agents[id])
-  const status = agent?.status ?? 'idle'
-  const label = agent?.displayName || id
-  return (
-    <div
-      className={`agent-tab ${active ? 'active' : ''}`}
-      onClick={() => onFocus(id)}
-      title={agent?.displayName ? `${agent.displayName} (${id})` : id}
-    >
-      <span className={`status-dot status-${status}`} />
-      <span className="agent-tab-label">{label}</span>
-      <button
-        className="agent-tab-close"
-        title="Close agent"
-        onClick={(e) => { e.stopPropagation(); onClose(id) }}
-      >×</button>
-    </div>
-  )
-})
-
-function SidebarItem({ icon, label, active, onClick }: { icon: IconName; label: string; active: boolean; onClick: () => void }) {
-  return (
-    <div className={`sidebar-item ${active ? 'active' : ''}`} onClick={onClick}>
-      <span className="sidebar-icon"><Icon name={icon} size={16} /></span>
-      <span>{label}</span>
+      <ApprovalModal queue={approvals} onRespond={respondApproval} />
     </div>
   )
 }

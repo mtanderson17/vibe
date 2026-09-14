@@ -188,3 +188,7 @@ declare global {
     }
   }
 }
+
+// Which top-level screen the shell is showing. Lives here rather than in
+// App.tsx so the menu/palette hooks can take it without importing App.
+export type SidebarView = 'control' | 'tasks' | 'files' | 'cost' | 'context' | 'settings'
