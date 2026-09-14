@@ -1,8 +1,17 @@
+// Settings screen, and the first-run wizard — same component, different copy.
+//
+// Owns the draft state for everything that participates in Save (keys,
+// workspace, models, budgets) and hands slices of it to the tab components.
+// The Keybindings tab is the exception: it writes through immediately.
+
 import { useEffect, useState } from 'react'
 import type { Config } from './types'
-import ModelChainPicker from './components/ModelChainPicker'
-import KeybindingsEditor from './components/KeybindingsEditor'
 import { usePrefs } from './stores/prefs'
+import WorkspaceTab from './components/settings/WorkspaceTab'
+import ModelsTab from './components/settings/ModelsTab'
+import ApiKeysTab from './components/settings/ApiKeysTab'
+import KeybindingsTab from './components/settings/KeybindingsTab'
+import { emptyKeyDraft, keyPatch, type ApiKeyDraft } from './components/settings/providers'
 
 interface Props {
   config: Config
@@ -24,88 +33,13 @@ interface OllamaState {
   models: Array<{ name: string }>
 }
 
-interface ProviderSpec {
-  key: keyof Config          // config field
-  label: string
-  console: string             // where to get the key
-  consoleUrl: string
-  placeholder: string
-  slugExample: string
-  hint: string
-}
-
-const PROVIDERS: ProviderSpec[] = [
-  {
-    key: 'openrouterApiKey',
-    label: 'OpenRouter',
-    console: 'openrouter.ai',
-    consoleUrl: 'https://openrouter.ai/keys',
-    placeholder: 'sk-or-v1-...',
-    slugExample: 'meta-llama/llama-3.3-70b-instruct:free',
-    hint: 'Router across 200+ models. Free tier included. The default and most flexible option.'
-  },
-  {
-    key: 'anthropicApiKey',
-    label: 'Anthropic',
-    console: 'console.anthropic.com',
-    consoleUrl: 'https://console.anthropic.com/settings/keys',
-    placeholder: 'sk-ant-api03-...',
-    slugExample: 'anthropic/claude-sonnet-4-6',
-    hint: 'Claude models direct. Best coding quality; BYOK for full cost transparency.'
-  },
-  {
-    key: 'openaiApiKey',
-    label: 'OpenAI',
-    console: 'platform.openai.com',
-    consoleUrl: 'https://platform.openai.com/api-keys',
-    placeholder: 'sk-proj-...',
-    slugExample: 'openai/gpt-5',
-    hint: 'GPT models direct.'
-  },
-  {
-    key: 'geminiApiKey',
-    label: 'Google Gemini',
-    console: 'aistudio.google.com',
-    consoleUrl: 'https://aistudio.google.com/apikey',
-    placeholder: 'AIza...',
-    slugExample: 'google/gemini-2.5-pro',
-    hint: 'Long-context Google models. Uses their OpenAI-compat endpoint.'
-  },
-  {
-    key: 'groqApiKey',
-    label: 'Groq',
-    console: 'console.groq.com',
-    consoleUrl: 'https://console.groq.com/keys',
-    placeholder: 'gsk_...',
-    slugExample: 'groq/llama-3.3-70b-versatile',
-    hint: 'Very fast inference for open-weight models.'
-  },
-  {
-    key: 'xaiApiKey',
-    label: 'xAI (Grok)',
-    console: 'console.x.ai',
-    consoleUrl: 'https://console.x.ai',
-    placeholder: 'xai-...',
-    slugExample: 'xai/grok-4',
-    hint: 'Grok models direct.'
-  }
-]
-
 export default function Setup({ config, onSaved, initialTab }: Props) {
   const [tab, setTab] = useState<Tab>(
     TABS.some(t => t.id === initialTab) ? (initialTab as Tab) : 'workspace'
   )
   const submitOnEnter = usePrefs(s => s.submitOnEnter)
   const setSubmitOnEnter = usePrefs(s => s.setSubmitOnEnter)
-  const [keys, setKeys] = useState<Record<string, string>>({
-    openrouterApiKey: config.openrouterApiKey ?? '',
-    anthropicApiKey: config.anthropicApiKey ?? '',
-    openaiApiKey: config.openaiApiKey ?? '',
-    geminiApiKey: config.geminiApiKey ?? '',
-    groqApiKey: config.groqApiKey ?? '',
-    xaiApiKey: config.xaiApiKey ?? ''
-  })
-  const [revealed, setRevealed] = useState<Set<string>>(new Set())
+  const [keys, setKeys] = useState<ApiKeyDraft>(() => emptyKeyDraft(config))
   const [workspace, setWorkspace] = useState(config.workspacePath ?? '')
   const [model, setModel] = useState(config.model)
   const [pmModel, setPmModel] = useState(config.pmModel ?? '')
@@ -126,12 +60,7 @@ export default function Setup({ config, onSaved, initialTab }: Props) {
   async function save() {
     setSaving(true)
     const patch: Partial<Config> = {
-      openrouterApiKey: keys.openrouterApiKey.trim() || null,
-      anthropicApiKey: keys.anthropicApiKey.trim() || null,
-      openaiApiKey: keys.openaiApiKey.trim() || null,
-      geminiApiKey: keys.geminiApiKey.trim() || null,
-      groqApiKey: keys.groqApiKey.trim() || null,
-      xaiApiKey: keys.xaiApiKey.trim() || null,
+      ...keyPatch(keys),
       workspacePath: workspace.trim() || null,
       model,
       pmModel: pmModel.trim() || null,
@@ -146,14 +75,6 @@ export default function Setup({ config, onSaved, initialTab }: Props) {
   const isFirstRun = !config.workspacePath
   const hasAnyKey = Object.values(keys).some(v => v?.trim())
   const ready = (hasAnyKey || ollama?.available) && workspace.trim() && model.trim()
-
-  function toggleReveal(k: string) {
-    setRevealed(prev => {
-      const next = new Set(prev)
-      if (next.has(k)) next.delete(k); else next.add(k)
-      return next
-    })
-  }
 
   return (
     <div className="settings-page">
@@ -181,182 +102,34 @@ export default function Setup({ config, onSaved, initialTab }: Props) {
           ))}
         </div>
 
-        {/* Workspace */}
         {tab === 'workspace' && (
-        <section className="settings-section">
-          <div className="settings-section-title">Workspace</div>
-          <div className="settings-section-body">
-            <div className="settings-field">
-              <label>Project folder</label>
-              <div className="row-inline">
-                <input
-                  value={workspace}
-                  onChange={e => setWorkspace(e.target.value)}
-                  placeholder="C:\path\to\your\project"
-                />
-                <button onClick={pickWorkspace}>Browse…</button>
-              </div>
-              <p className="hint">A git repo (with a sensible <code>.gitignore</code>) will be initialized here if one doesn't exist.</p>
-            </div>
-
-            <div className="settings-field">
-              <label>Concurrent agents (1–8)</label>
-              <input
-                type="number"
-                min={1}
-                max={8}
-                value={agentCount}
-                onChange={e => setAgentCount(parseInt(e.target.value) || 1)}
-                style={{ width: 100 }}
-              />
-              <p className="hint">More agents = more parallelism, more RAM, more API load.</p>
-            </div>
-
-            <div className="settings-field">
-              <label>Steps per agent turn budget (5–200)</label>
-              <input
-                type="number"
-                min={5}
-                max={200}
-                value={maxSteps}
-                onChange={e => setMaxSteps(parseInt(e.target.value) || 25)}
-                style={{ width: 100 }}
-              />
-              <p className="hint">
-                Max tool-call turns before an agent pauses for user input. Hitting the limit shows a
-                Continue button — click to add another {maxSteps} steps of runway.
-              </p>
-            </div>
-
-            <div className="settings-field">
-              <label>Submit behavior</label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 4 }}>
-                <input
-                  type="checkbox"
-                  checked={submitOnEnter}
-                  onChange={e => setSubmitOnEnter(e.target.checked)}
-                />
-                <span>Press Enter to send (Shift+Enter for newline)</span>
-              </label>
-              <p className="hint">
-                Applies to agent chat, PM chat, and task descriptions. If off, Enter adds a newline and
-                Cmd/Ctrl+Enter sends — better for long multi-line prompts.
-              </p>
-            </div>
-          </div>
-        </section>
+          <WorkspaceTab
+            workspace={workspace}
+            setWorkspace={setWorkspace}
+            onPickWorkspace={pickWorkspace}
+            agentCount={agentCount}
+            setAgentCount={setAgentCount}
+            maxSteps={maxSteps}
+            setMaxSteps={setMaxSteps}
+            submitOnEnter={submitOnEnter}
+            setSubmitOnEnter={setSubmitOnEnter}
+          />
         )}
 
-        {/* Model */}
         {tab === 'model' && (
-        <section className="settings-section">
-          <div className="settings-section-title">Default model chain</div>
-          <div className="settings-section-body">
-            <div className="settings-field">
-              <label>Coding-agent model chain (in order of priority)</label>
-              <ModelChainPicker
-                value={model}
-                onChange={setModel}
-                config={{
-                  ...config,
-                  openrouterApiKey: keys.openrouterApiKey || null,
-                  anthropicApiKey: keys.anthropicApiKey || null,
-                  openaiApiKey: keys.openaiApiKey || null,
-                  geminiApiKey: keys.geminiApiKey || null,
-                  groqApiKey: keys.groqApiKey || null,
-                  xaiApiKey: keys.xaiApiKey || null
-                }}
-              />
-              <p className="hint">
-                Applies globally to coding agents. Individual agents can override in their header. First model is primary; if it fails, Vibe falls through to the next.
-              </p>
-            </div>
-
-            <div className="settings-field">
-              <label>PM-agent model chain (optional — uses coding chain if empty)</label>
-              <ModelChainPicker
-                value={pmModel}
-                onChange={setPmModel}
-                config={{
-                  ...config,
-                  openrouterApiKey: keys.openrouterApiKey || null,
-                  anthropicApiKey: keys.anthropicApiKey || null,
-                  openaiApiKey: keys.openaiApiKey || null,
-                  geminiApiKey: keys.geminiApiKey || null,
-                  groqApiKey: keys.groqApiKey || null,
-                  xaiApiKey: keys.xaiApiKey || null
-                }}
-              />
-              <p className="hint">
-                PM agent maintains the project summary and manages tasks — a cheaper/faster model is usually a good fit here.
-              </p>
-            </div>
-          </div>
-        </section>
+          <ModelsTab
+            config={config}
+            keys={keys}
+            model={model}
+            setModel={setModel}
+            pmModel={pmModel}
+            setPmModel={setPmModel}
+          />
         )}
 
-        {/* API keys */}
-        {tab === 'keys' && (
-        <section className="settings-section">
-          <div className="settings-section-title">API keys</div>
-          <div className="settings-section-body">
-            <div className="trust-note">
-              <strong>Where your keys live.</strong> Encrypted at rest on macOS/Windows (or plaintext on Linux w/o keyring). Stored locally
-              in Electron's per-user data directory — never sent to Vibe. Full path in the README.
-            </div>
+        {tab === 'keys' && <ApiKeysTab keys={keys} setKeys={setKeys} />}
 
-            {PROVIDERS.map(p => {
-              const currentValue = keys[p.key] ?? ''
-              const isSet = !!currentValue.trim()
-              const isRevealed = revealed.has(p.key)
-              return (
-                <div key={p.key} className="provider-row">
-                  <div className="provider-head">
-                    <span className="provider-name">{p.label}</span>
-                    <span className={`provider-status ${isSet ? 'set' : ''}`}>
-                      {isSet ? '● configured' : 'not set'}
-                    </span>
-                  </div>
-                  <div className="row-inline">
-                    <input
-                      type={isRevealed ? 'text' : 'password'}
-                      value={currentValue}
-                      onChange={e => setKeys(prev => ({ ...prev, [p.key]: e.target.value }))}
-                      placeholder={p.placeholder}
-                      autoComplete="off"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => toggleReveal(p.key)}
-                      title={isRevealed ? 'Hide' : 'Reveal'}
-                      style={{ minWidth: 68 }}
-                    >
-                      {isRevealed ? 'Hide' : 'Reveal'}
-                    </button>
-                  </div>
-                  <div className="provider-hint">
-                    {p.hint} · Get a key at{' '}
-                    <span style={{ color: 'var(--accent)', fontFamily: 'monospace', fontSize: 11 }}>{p.console}</span>{' '}
-                    · slug format <code>{p.slugExample}</code>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </section>
-        )}
-
-        {tab === 'keybindings' && (
-        <section className="settings-section">
-          <div className="settings-section-title">Keybindings</div>
-          <div className="settings-section-body">
-            <div style={{ fontSize: 12, color: 'var(--fg-dim)', marginBottom: 12 }}>
-              Click <strong>Rebind</strong>, then press the target key combination. Changes save immediately and update the app menu.
-            </div>
-            <KeybindingsEditor />
-          </div>
-        </section>
-        )}
+        {tab === 'keybindings' && <KeybindingsTab />}
 
         <footer className="settings-footer">
           <div style={{ opacity: 0.7, fontSize: 12 }}>

@@ -192,3 +192,20 @@ declare global {
 // Which top-level screen the shell is showing. Lives here rather than in
 // App.tsx so the menu/palette hooks can take it without importing App.
 export type SidebarView = 'control' | 'tasks' | 'files' | 'cost' | 'context' | 'settings'
+
+export type TaskStatus = 'backlog' | 'in_progress' | 'awaiting_merge' | 'done'
+
+// Renderer-side mirror of electron/main/tasks.ts. `status` is widened to string
+// because it arrives over IPC from a tasks.json the user could have edited.
+export interface Task {
+  id: string
+  title: string
+  description?: string
+  status: string
+  assignedTo?: string | null
+  branch?: string | null
+  proposed?: boolean
+  proposedBy?: string
+  createdAt: string
+  updatedAt: string
+}

@@ -1,38 +1,24 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+// The Tasks screen: a kanban board over the workspace's .vibe/tasks.json,
+// plus the PM agent's proposed-task row and its chat drawer.
+//
+// This component owns the task list and every mutation of it; TaskCard and
+// PmPanel are presentational-ish children that call back up here to refresh.
+
+import { useEffect, useState, useCallback } from 'react'
 import { useAgents } from './stores/agents'
 import { useSubmitKey } from './stores/prefs'
-import type { Message } from './types'
+import TaskCard, { type TaskCardVariant } from './components/tasks/TaskCard'
+import PmPanel from './components/tasks/PmPanel'
+import type { Task } from './types'
 
 interface Props { agentIds: string[] }
 
-interface Task {
-  id: string
-  title: string
-  description?: string
-  status: string
-  assignedTo?: string | null
-  branch?: string | null
-  proposed?: boolean
-  proposedBy?: string
-  createdAt: string
-  updatedAt: string
-}
-
-const COLUMNS: Array<{ key: string; label: string }> = [
+const COLUMNS: Array<{ key: TaskCardVariant; label: string }> = [
   { key: 'backlog', label: 'Backlog' },
   { key: 'in_progress', label: 'In Progress' },
   { key: 'awaiting_merge', label: 'Awaiting Merge' },
   { key: 'done', label: 'Done' }
 ]
-
-interface PmState {
-  status: 'idle' | 'running' | 'error'
-  lastRun: string | null
-  messages: Message[]
-  error?: string
-  usage?: { total: number }
-  pinnedModel?: string
-}
 
 export default function TasksView({ agentIds }: Props) {
   const [tasks, setTasks] = useState<Task[]>([])
@@ -41,43 +27,13 @@ export default function TasksView({ agentIds }: Props) {
   const [showDescription, setShowDescription] = useState(false)
   const submitKey = useSubmitKey()
   const [assignPickerFor, setAssignPickerFor] = useState<string | null>(null)
-  const [pmState, setPmState] = useState<PmState>({ status: 'idle', lastRun: null, messages: [] })
-  const [pmInput, setPmInput] = useState('')
-  const [pmPanelOpen, setPmPanelOpen] = useState(false)
   const agents = useAgents(s => s.agents)
-  const pmScrollRef = useRef<HTMLDivElement>(null)
 
   const refresh = useCallback(async () => {
-    const list = await window.vibe.tasks.list()
-    setTasks(list)
+    setTasks(await window.vibe.tasks.list())
   }, [])
 
-  const refreshPm = useCallback(async () => {
-    const s = await window.vibe.pm.state()
-    setPmState(s as PmState)
-  }, [])
-
-  useEffect(() => { refresh(); refreshPm() }, [refresh, refreshPm])
-
-  useEffect(() => {
-    const off = window.vibe.onPmEvent(evt => {
-      if (evt.type === 'status') {
-        setPmState(prev => ({ ...prev, status: evt.data as 'idle' | 'running' | 'error' }))
-        if (evt.data === 'idle') refresh() // proposed tasks might have appeared
-      } else if (evt.type === 'message') {
-        setPmState(prev => ({ ...prev, messages: [...prev.messages, evt.data as Message] }))
-      } else if (evt.type === 'usage') {
-        setPmState(prev => ({ ...prev, usage: evt.data as { total: number } }))
-      } else if (evt.type === 'cleared') {
-        setPmState(prev => ({ ...prev, messages: [], usage: undefined }))
-      }
-    })
-    return off
-  }, [refresh])
-
-  useEffect(() => {
-    if (pmScrollRef.current) pmScrollRef.current.scrollTop = pmScrollRef.current.scrollHeight
-  }, [pmState.messages.length])
+  useEffect(() => { refresh() }, [refresh])
 
   async function create() {
     if (!newTitle.trim()) return
@@ -109,15 +65,13 @@ export default function TasksView({ agentIds }: Props) {
     refresh()
   }
 
-  async function sendToPm() {
-    if (!pmInput.trim() || pmState.status === 'running') return
-    const text = pmInput.trim()
-    setPmInput('')
-    setPmPanelOpen(true)
-    await window.vibe.pm.run('chat', text)
-  }
-
   const proposed = tasks.filter(t => t.proposed)
+
+  // Shared by the proposed row and every kanban column.
+  const cardProps = {
+    agents, agentIds, assignPickerFor, setAssignPickerFor,
+    onRefresh: refresh, onAssign: assign, onDelete: del, onMove: moveTask
+  }
 
   return (
     <div className="screen tasks-screen">
@@ -174,16 +128,9 @@ export default function TasksView({ agentIds }: Props) {
               <TaskCard
                 key={t.id}
                 task={t}
-                agents={agents}
-                agentIds={agentIds}
                 variant="proposed"
-                assignPickerFor={assignPickerFor}
-                setAssignPickerFor={setAssignPickerFor}
-                onRefresh={refresh}
-                onAssign={assign}
-                onDelete={del}
                 onAcceptProposed={acceptProposed}
-                onMove={moveTask}
+                {...cardProps}
               />
             ))}
           </div>
@@ -200,19 +147,7 @@ export default function TasksView({ agentIds }: Props) {
               </div>
               <div className="kanban-col-body">
                 {colTasks.map(t => (
-                  <TaskCard
-                    key={t.id}
-                    task={t}
-                    agents={agents}
-                    agentIds={agentIds}
-                    variant={col.key as 'backlog' | 'in_progress' | 'awaiting_merge' | 'done'}
-                    assignPickerFor={assignPickerFor}
-                    setAssignPickerFor={setAssignPickerFor}
-                    onRefresh={refresh}
-                    onAssign={assign}
-                    onDelete={del}
-                    onMove={moveTask}
-                  />
+                  <TaskCard key={t.id} task={t} variant={col.key} {...cardProps} />
                 ))}
                 {colTasks.length === 0 && <div className="kanban-empty">— empty —</div>}
               </div>
@@ -221,219 +156,7 @@ export default function TasksView({ agentIds }: Props) {
         })}
       </div>
 
-      <div className={`pm-panel ${pmPanelOpen ? 'open' : ''}`}>
-        <div className="pm-panel-header" onClick={() => setPmPanelOpen(!pmPanelOpen)}>
-          <span className={`status-dot status-${pmState.status === 'running' ? 'running' : pmState.status === 'error' ? 'error' : 'idle'}`} />
-          <strong>PM agent</strong>
-          <span style={{ opacity: 0.7, fontSize: 11 }}>
-            {pmState.status === 'running' ? 'working…'
-              : pmState.lastRun ? `last run ${new Date(pmState.lastRun).toLocaleTimeString()}`
-              : 'idle'}
-          </span>
-          {pmState.usage && <span style={{ opacity: 0.7, fontSize: 11 }}>· {pmState.usage.total.toLocaleString()} tok</span>}
-          <div style={{ flex: 1 }} />
-          <span style={{ fontSize: 12 }}>{pmPanelOpen ? '▼' : '▲'}</span>
-        </div>
-        {pmPanelOpen && (
-          <>
-            <div className="pm-chat" ref={pmScrollRef}>
-              {pmState.messages.filter(m => m.role !== 'system').map((m, i) => (
-                <div key={i} className={`msg ${m.role}`} style={{ fontSize: 12 }}>
-                  <div className="role">{m.role === 'tool' ? `tool: ${m.name}` : m.role}</div>
-                  {m.content && <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>}
-                  {m.toolCalls?.map(tc => (
-                    <div key={tc.id} className="toolcall">→ {tc.name}({Object.keys(tc.arguments).join(', ')})</div>
-                  ))}
-                </div>
-              ))}
-              {pmState.messages.length === 0 && (
-                <div className="msg system">Ask the PM agent about the project, or trigger a summary update.</div>
-              )}
-            </div>
-            <div className="pm-composer">
-              <input
-                value={pmInput}
-                onChange={e => setPmInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') sendToPm() }}
-                placeholder="Ask PM: 'add a task for X', 'what's the current state?', 'regenerate summary'…"
-                disabled={pmState.status === 'running'}
-              />
-              {pmState.status === 'running' ? (
-                <button className="danger" onClick={() => window.vibe.pm.kill()}>Stop</button>
-              ) : (
-                <button className="primary" onClick={sendToPm} disabled={!pmInput.trim()}>
-                  Send
-                </button>
-              )}
-              <button onClick={() => window.vibe.pm.clear()}>Clear chat</button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
-interface TaskCardProps {
-  task: Task
-  agents: Record<string, { status?: string } | undefined> | Record<string, unknown>
-  agentIds: string[]
-  variant: 'proposed' | 'backlog' | 'in_progress' | 'awaiting_merge' | 'done'
-  assignPickerFor: string | null
-  setAssignPickerFor: (id: string | null) => void
-  onRefresh: () => void
-  onAssign: (taskId: string, agentId: string) => void
-  onDelete: (id: string) => void
-  onAcceptProposed?: (id: string) => void
-  onMove: (id: string, status: string) => void
-}
-
-function TaskCard({
-  task, agents, agentIds, variant,
-  assignPickerFor, setAssignPickerFor,
-  onRefresh, onAssign, onDelete, onAcceptProposed, onMove
-}: TaskCardProps) {
-  const [editing, setEditing] = useState(false)
-  const [editTitle, setEditTitle] = useState(task.title)
-  const [editDesc, setEditDesc] = useState(task.description ?? '')
-  const submitKey = useSubmitKey()
-
-  async function saveEdit() {
-    if (!editTitle.trim()) return
-    await window.vibe.tasks.update(task.id, {
-      title: editTitle.trim(),
-      description: editDesc.trim() || undefined
-    })
-    setEditing(false)
-    onRefresh()
-  }
-
-  function cancelEdit() {
-    setEditTitle(task.title)
-    setEditDesc(task.description ?? '')
-    setEditing(false)
-  }
-
-  const cardCls = `task-card ${variant === 'proposed' ? 'proposed' : ''}`
-  const isProposed = variant === 'proposed'
-
-  if (editing) {
-    return (
-      <div className={cardCls}>
-        <input
-          autoFocus
-          value={editTitle}
-          onChange={e => setEditTitle(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit() }
-            if (e.key === 'Escape') cancelEdit()
-          }}
-          placeholder="Task title"
-          style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}
-        />
-        <textarea
-          value={editDesc}
-          onChange={e => setEditDesc(e.target.value)}
-          onKeyDown={e => {
-            if (submitKey.isSubmit(e)) { e.preventDefault(); saveEdit() }
-            if (e.key === 'Escape') cancelEdit()
-          }}
-          placeholder={`Optional description — sent to the agent as part of the task (${submitKey.hint}, Esc to cancel)`}
-          rows={4}
-          style={{ resize: 'vertical', fontSize: 12, marginBottom: 8 }}
-        />
-        <div className="task-card-actions">
-          <button className="primary" onClick={saveEdit} disabled={!editTitle.trim()}>Save</button>
-          <button onClick={cancelEdit}>Cancel</button>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className={cardCls}>
-      <div className="task-card-title" onClick={() => setEditing(true)} style={{ cursor: 'text' }} title="Click to edit">
-        {task.title}
-      </div>
-      {task.description && (
-        <div className="task-card-desc" onClick={() => setEditing(true)} style={{ cursor: 'text' }} title="Click to edit">
-          {task.description}
-        </div>
-      )}
-      {!task.description && !isProposed && (
-        <div
-          className="task-card-desc"
-          onClick={() => setEditing(true)}
-          style={{ cursor: 'text', opacity: 0.4, fontStyle: 'italic' }}
-        >
-          + add description
-        </div>
-      )}
-      {!isProposed && (
-        <div className="task-card-meta">
-          {task.assignedTo && (() => {
-            const a = (agents as Record<string, { status?: string; displayName?: string } | undefined>)[task.assignedTo]
-            return (
-              <span>
-                <span
-                  className={`status-dot status-${a?.status ?? 'idle'}`}
-                  style={{ marginRight: 4 }}
-                />
-                {a?.displayName || task.assignedTo}
-              </span>
-            )
-          })()}
-          {task.branch && <span style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--accent)' }}>{task.branch}</span>}
-        </div>
-      )}
-      <div className="task-card-actions">
-        {variant === 'proposed' && onAcceptProposed && (
-          <>
-            <button className="primary" onClick={() => onAcceptProposed(task.id)}>Accept</button>
-            <button onClick={() => setEditing(true)}>Edit</button>
-            <button className="danger" onClick={() => onDelete(task.id)}>Dismiss</button>
-          </>
-        )}
-        {variant === 'backlog' && (
-          <>
-            {assignPickerFor === task.id ? (
-              <select
-                autoFocus
-                onChange={e => e.target.value && onAssign(task.id, e.target.value)}
-                onBlur={() => setAssignPickerFor(null)}
-                defaultValue=""
-              >
-                <option value="" disabled>Assign to…</option>
-                {agentIds.map(id => {
-                  const a = (agents as Record<string, { status?: string; displayName?: string } | undefined>)[id]
-                  const s = a?.status ?? 'idle'
-                  const busy = s === 'running' || s === 'awaiting_input' || s === 'awaiting_merge'
-                  const label = a?.displayName ? `${a.displayName} (${id})` : id
-                  return <option key={id} value={id} disabled={busy}>{label} {busy ? `· ${s}` : ''}</option>
-                })}
-              </select>
-            ) : (
-              <button className="primary" onClick={() => setAssignPickerFor(task.id)}>Assign to agent</button>
-            )}
-            <button onClick={() => setEditing(true)}>Edit</button>
-            <button className="danger" onClick={() => onDelete(task.id)}>Delete</button>
-          </>
-        )}
-        {(variant === 'in_progress' || variant === 'awaiting_merge') && (
-          <>
-            <button onClick={() => onMove(task.id, 'done')}>Mark done</button>
-            <button onClick={() => setEditing(true)}>Edit</button>
-            <button className="danger" onClick={() => onDelete(task.id)}>Delete</button>
-          </>
-        )}
-        {variant === 'done' && (
-          <>
-            <button onClick={() => onMove(task.id, 'backlog')}>Reopen</button>
-            <button onClick={() => setEditing(true)}>Edit</button>
-            <button className="danger" onClick={() => onDelete(task.id)}>Delete</button>
-          </>
-        )}
-      </div>
+      <PmPanel onTasksChanged={refresh} />
     </div>
   )
 }
