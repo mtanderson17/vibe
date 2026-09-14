@@ -13,9 +13,8 @@ isolation bypass — which voids the exact guarantee the README makes about the
 renderer. Shipping signed installers on that runtime would mean shipping the
 bypass to every user and re-shipping later. See "Runtime upgrade" below.
 
-**If you want the best value-per-hour item instead, it's #76** (pre-warm
-worktrees): it's small, measurable, and speeds up the most repeated interaction
-in the app.
+**#76 (pre-warm worktrees) is done**, along with the Windows `launch_app`
+output bug — see the Done entries below.
 
 **The most strategically valuable item is #82** (merge queue). See "The field,
 surveyed 2026-09-14" for why: it lives in the one layer that no agent CLI
@@ -178,21 +177,30 @@ Once there are real numbers, look at:
 
 Blocked on #66. Ties into #74.
 
-### #76 · Pre-warm worktrees
+### Done · #76 Pre-warm worktrees
 
-Emdash cut task startup from 5 s to 500–1000 ms by creating worktrees in the
-background before they're needed. Vibe has the same cost in the same place:
-`createWorktree` does a `worktree remove` → `branch -D` → `worktree add`
-synchronously when you assign a task, and the user waits through it.
+Landed 2026-09-14. `prewarmWorktree` builds the agent's checkout detached at
+HEAD when the agent spawns, and `createWorktree` now takes a fast path when a
+checkout already exists: reset it to the workspace's *current* HEAD, clean it,
+and create the branch in place rather than materialising the tree again. The
+cold path is unchanged as a fallback, and prewarm is fire-and-forget so a
+failure only costs the old behaviour.
 
-Not a pure copy, because of how we name branches. `createWorktree` takes a
-`taskSlug` and creates `vibe/<agent>/<slug>` in the same `worktree add -b`
-call, so a pre-warmed worktree can't know its branch name yet. Two ways out:
-add the worktree detached and create the branch at assignment, or warm it on a
-placeholder branch and `git branch -m` when the task arrives.
+Also parallelised task startup: `generateSlug` is an LLM round-trip and the
+three context reads are disk I/O, with no dependency between them — they ran in
+series and now don't.
 
-Cheap, measurable, and it improves the single most repeated interaction in the
-app. Best value-per-hour item on this list.
+Two things worth remembering, both caught by the new `tests/git.test.ts` (git.ts
+previously had no tests at all):
+
+- A prewarmed tree is pinned at spawn time, so it **must** be reset to the
+  workspace's current HEAD when the task finally starts — otherwise an agent
+  that sat idle while other work merged would silently branch from stale code.
+- `git branch -D` refuses while the branch is checked out anywhere, so the
+  stale-branch delete has to happen *after* detaching the worktree, not before.
+
+Remaining idea, not done: prewarm could also run after an agent finishes a task
+so the *next* task is warm too, not just the first.
 
 ### #77 · Pull work in from an issue tracker
 

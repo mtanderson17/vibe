@@ -3,7 +3,7 @@ import type { AgentEvent, AgentState, Message } from './types'
 import { chatCompletion, shortCompletion, formatProviderError } from './providers'
 import { executeTool, killAgentProcesses, allToolSchemas } from './tools'
 import { executeToolCalls, accumulateUsage, pinnedModelFor } from './tool-loop'
-import { createWorktree, commitAll } from './git'
+import { createWorktree, prewarmWorktree, commitAll } from './git'
 import { readContext, readAgentsGuide, readSummary } from './context'
 import { getConfig } from './config'
 import { saveAgent, loadAgents } from './persistence'
@@ -69,6 +69,16 @@ export function spawnAgent(): AgentState {
   const a: AgentState = { id, status: 'idle', task: null, branch: null, worktreePath: null, messages: [] }
   agents.set(id, a)
   persist(a)
+
+  // Build the agent's checkout now, while it sits idle, so that starting its
+  // first task doesn't have to wait for one. Fire-and-forget on purpose: if it
+  // fails, createWorktree just takes the slow path later.
+  const cfg = getConfig()
+  if (cfg.workspacePath) {
+    prewarmWorktree(cfg.workspacePath, id)
+      .catch(err => console.warn(`[vibe] worktree prewarm for ${id} failed (will build on demand)`, err))
+  }
+
   return a
 }
 
@@ -391,17 +401,20 @@ export async function startAgent(id: string, task: string): Promise<void> {
   emit({ agentId: id, type: 'status', data: agent.status })
 
   try {
-    const slug = await generateSlug(cfg, task)
-    const { worktreePath, branch } = await createWorktree(cfg.workspacePath, id, slug)
-    agent.worktreePath = worktreePath
-    agent.branch = branch
-    emit({ agentId: id, type: 'status', data: { status: agent.status, branch, worktreePath } })
-
-    const [sharedContext, agentsGuide, summary] = await Promise.all([
+    // The slug is an LLM round-trip and the context files are disk reads —
+    // neither depends on the other, so don't make the user wait for them in
+    // series. The worktree itself was usually prewarmed at spawn.
+    const [slug, sharedContext, agentsGuide, summary] = await Promise.all([
+      generateSlug(cfg, task),
       readContext(cfg.workspacePath),
       readAgentsGuide(cfg.workspacePath),
       readSummary(cfg.workspacePath)
     ])
+
+    const { worktreePath, branch } = await createWorktree(cfg.workspacePath, id, slug)
+    agent.worktreePath = worktreePath
+    agent.branch = branch
+    emit({ agentId: id, type: 'status', data: { status: agent.status, branch, worktreePath } })
     const systemMsg: Message = {
       role: 'system',
       content: buildSystemPrompt({

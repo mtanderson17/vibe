@@ -78,24 +78,69 @@ export async function currentBranch(workspacePath: string): Promise<string> {
   return git(workspacePath, ['rev-parse', '--abbrev-ref', 'HEAD'])
 }
 
+export function worktreePathFor(workspacePath: string, agentId: string): string {
+  return path.join(workspacePath, '.vibe', 'worktrees', agentId)
+}
+
+/**
+ * Create the agent's worktree ahead of time, detached at HEAD.
+ *
+ * `git worktree add` is the slow part of starting a task — it materialises a
+ * full checkout — and it used to run while the user waited. Doing it at spawn
+ * time instead means starting a task only has to create a branch inside a
+ * checkout that already exists, which is near-instant.
+ *
+ * Detached rather than on a branch because the branch name embeds the task
+ * slug, which doesn't exist yet: the task hasn't been written. `createWorktree`
+ * names the branch later.
+ *
+ * Safe to call repeatedly and safe to ignore: a failure here just means the
+ * slow path runs at task time, so callers should fire-and-forget.
+ */
+export async function prewarmWorktree(workspacePath: string, agentId: string): Promise<void> {
+  const worktreePath = worktreePathFor(workspacePath, agentId)
+  if (existsSync(worktreePath)) return
+  await mkdir(path.dirname(worktreePath), { recursive: true })
+  await git(workspacePath, ['worktree', 'add', '--detach', worktreePath, 'HEAD'])
+}
+
 export async function createWorktree(
   workspacePath: string,
   agentId: string,
   taskSlug: string
 ): Promise<{ worktreePath: string; branch: string }> {
   const branch = `vibe/${agentId}/${taskSlug}`
-  const worktreeRoot = path.join(workspacePath, '.vibe', 'worktrees')
-  await mkdir(worktreeRoot, { recursive: true })
-  const worktreePath = path.join(worktreeRoot, agentId)
+  const worktreePath = worktreePathFor(workspacePath, agentId)
+  await mkdir(path.dirname(worktreePath), { recursive: true })
 
-  // Remove existing worktree/branch if present (idempotent for PoC)
-  try {
-    await git(workspacePath, ['worktree', 'remove', '--force', worktreePath])
-  } catch { /* not existing */ }
-  try {
-    await git(workspacePath, ['branch', '-D', branch])
-  } catch { /* not existing */ }
+  const dropStaleBranch = async () => {
+    // git refuses to delete a branch that is checked out anywhere, so this can
+    // only run once nothing has it.
+    try { await git(workspacePath, ['branch', '-D', branch]) } catch { /* not existing */ }
+  }
 
+  // Fast path: a prewarmed (or previously used) checkout is already on disk, so
+  // just put a fresh branch in it rather than materialising the tree again.
+  //
+  // Reset to the *workspace's* current HEAD, not the worktree's: a prewarmed
+  // tree was pinned when the agent spawned, and a reused one still sits on the
+  // last task's commits. A new task has to start from current main either way.
+  if (existsSync(worktreePath)) {
+    try {
+      const head = await git(workspacePath, ['rev-parse', 'HEAD'])
+      await git(worktreePath, ['checkout', '--detach', head])  // leave any previous task branch
+      await git(worktreePath, ['reset', '--hard', head])       // drop leftovers from a prior task
+      await git(worktreePath, ['clean', '-fd'])
+      await dropStaleBranch()                                  // safe now that it isn't checked out
+      await git(worktreePath, ['checkout', '-b', branch])
+      return { worktreePath, branch }
+    } catch {
+      // Reusing it failed — fall through and rebuild from scratch.
+      await git(workspacePath, ['worktree', 'remove', '--force', worktreePath]).catch(() => { /* ignore */ })
+    }
+  }
+
+  await dropStaleBranch()
   await git(workspacePath, ['worktree', 'add', '-b', branch, worktreePath])
   return { worktreePath, branch }
 }
