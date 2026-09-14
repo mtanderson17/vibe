@@ -4,7 +4,7 @@
 // Autofocuses the title. Tab moves to description. Submit key follows the
 // user's submitOnEnter preference. Esc cancels.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useSubmitKey } from '../stores/prefs'
 
 interface Props {
@@ -23,16 +23,17 @@ export default function NewTaskModal({ open, onClose, onCreated, hasWorkspace }:
   const titleRef = useRef<HTMLInputElement>(null)
   const submitKey = useSubmitKey()
 
-  // Reset + focus on open
-  useEffect(() => {
-    if (open) {
-      setTitle('')
-      setDescription('')
-      setError(null)
-      setSaving(false)
-      // Focus after paint
-      setTimeout(() => titleRef.current?.focus(), 20)
-    }
+  // Reset + focus on open. useLayoutEffect, not a timeout: the fields are
+  // already in the DOM on the render that flips `open` to true, so the ref is
+  // populated by the time this runs — and focusing before paint means the
+  // caret never visibly lands somewhere else first.
+  useLayoutEffect(() => {
+    if (!open) return
+    setTitle('')
+    setDescription('')
+    setError(null)
+    setSaving(false)
+    titleRef.current?.focus()
   }, [open])
 
   // Esc to close, even when focus is in a field

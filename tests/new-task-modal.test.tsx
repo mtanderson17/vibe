@@ -123,3 +123,26 @@ test('Escape closes the modal', async () => {
     assert.equal(closed, true)
   } finally { cleanup(); restore() }
 })
+
+test('the title field is focused as soon as the modal opens', () => {
+  const restore = stubVibe({})
+  try {
+    const { rerender } = render(<NewTaskModal open={false} hasWorkspace onClose={() => {}} />)
+    rerender(<NewTaskModal open hasWorkspace onClose={() => {}} />)
+    assert.equal(document.activeElement, screen.getByPlaceholderText(/Task title/))
+  } finally { cleanup(); restore() }
+})
+
+test('reopening the modal clears what was typed last time', async () => {
+  const restore = stubVibe({})
+  try {
+    const user = userEvent.setup()
+    const { rerender } = render(<NewTaskModal open hasWorkspace onClose={() => {}} />)
+    await user.type(screen.getByPlaceholderText(/Task title/), 'abandoned draft')
+
+    rerender(<NewTaskModal open={false} hasWorkspace onClose={() => {}} />)
+    rerender(<NewTaskModal open hasWorkspace onClose={() => {}} />)
+
+    assert.equal((screen.getByPlaceholderText(/Task title/) as HTMLInputElement).value, '')
+  } finally { cleanup(); restore() }
+})
