@@ -133,9 +133,13 @@ actually running on an OS: `run_bash`'s shell selection (PowerShell vs `$SHELL`,
 which is zsh on macOS), `launch_app`'s (`cmd.exe` vs `$SHELL`), and the Settings
 accelerator. Its payloads use `node -e …` and small script files rather than
 `echo`/`pwd`, so the command is identical everywhere and the only variable is
-the shell plumbing under test. Two traps it encodes: `$TMPDIR` is a symlink on
-macOS, so compare with `realpathSync`; and `cmd.exe /d /s /c` strips the outer
-quotes of the whole command string, so inline quoted payloads get mangled there.
+the shell plumbing under test. Three traps it encodes. `cmd.exe /d /s /c` strips the outer quotes of the whole
+command string, so inline quoted payloads get mangled on Windows — use a script
+file. And comparing a path against a child's reported cwd needs
+`realpathSync.native`, not plain `realpathSync`: macOS `$TMPDIR` is a symlink
+(`/var/…` → `/private/var/…`) which both resolve, but the Windows CI runner's
+temp dir is an 8.3 short path (`C:\Users\RUNNER~1\…`) that only the native call
+expands to the long form the child reports.
 
 What the suite still cannot reach is anything needing a live Electron runtime —
 `safeStorage`, menu construction, window creation. See BACKLOG.md.

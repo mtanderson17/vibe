@@ -15,10 +15,18 @@ import path from 'node:path'
 import { executeTool } from '../electron/main/tools'
 import { launchApp, stopApp, listRunningApps, tailApp } from '../electron/main/launcher'
 
+// Canonical form of a path, for comparing against what a child process reports
+// as its cwd. `.native` rather than plain realpathSync because each OS mangles
+// the temp dir differently: macOS $TMPDIR is a symlink (/var/… → /private/var/…),
+// and Windows CI hands out an 8.3 short path (C:\Users\RUNNER~1\…) that the
+// child reports in long form (C:\Users\runneradmin\…). The native call resolves
+// both; the JS implementation resolves only the symlink.
+function canonical(p: string): string {
+  return realpathSync.native(p)
+}
+
 function scratch() {
-  // realpath matters on macOS: $TMPDIR is a symlink (/var/… → /private/var/…),
-  // so a child process reports the resolved path and a naive compare fails.
-  const dir = realpathSync(mkdtempSync(path.join(tmpdir(), 'vibe-platform-')))
+  const dir = canonical(mkdtempSync(path.join(tmpdir(), 'vibe-platform-')))
   return {
     dir,
     // Best-effort: on Windows a just-stopped detached child can still hold the
@@ -59,7 +67,7 @@ test('run_bash: runs inside the worktree, not the app cwd', async () => {
   const { dir, cleanup } = scratch()
   try {
     const out = await executeTool(dir, 'run_bash', { command: 'node -e "console.log(process.cwd())"' })
-    assert.equal(realpathSync(out.trim()), dir)
+    assert.equal(canonical(out.trim()), dir)
   } finally { cleanup() }
 })
 
