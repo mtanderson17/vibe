@@ -128,6 +128,18 @@ Tests that assert platform-specific behaviour (path separators, shell quoting)
 must guard on `process.platform` — CI runs the suite on all three, and a test
 that only holds on one will break the other two.
 
+`tests/platform.test.ts` is the file for branches that can only be verified by
+actually running on an OS: `run_bash`'s shell selection (PowerShell vs `$SHELL`,
+which is zsh on macOS), `launch_app`'s (`cmd.exe` vs `$SHELL`), and the Settings
+accelerator. Its payloads use `node -e …` and small script files rather than
+`echo`/`pwd`, so the command is identical everywhere and the only variable is
+the shell plumbing under test. Two traps it encodes: `$TMPDIR` is a symlink on
+macOS, so compare with `realpathSync`; and `cmd.exe /d /s /c` strips the outer
+quotes of the whole command string, so inline quoted payloads get mangled there.
+
+What the suite still cannot reach is anything needing a live Electron runtime —
+`safeStorage`, menu construction, window creation. See BACKLOG.md.
+
 One sharp edge: `tsx` only applies a tsconfig's `compilerOptions` to files that
 config's `include` matches. The root `tsconfig.json` therefore carries
 `compilerOptions` + `include` purely so `.tsx` tests get the automatic JSX

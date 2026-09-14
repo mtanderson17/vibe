@@ -44,3 +44,14 @@ test('listResolvedBindings stays in sync with KEYBINDINGS', () => {
   const newAgent = rows.find(r => r.id === 'new-agent')!
   assert.equal(newAgent.current, newAgent.defaultAccelerator)
 })
+
+test('the Settings accelerator follows the platform convention', () => {
+  // The one keybinding with a platform branch: macOS users expect Cmd+, for
+  // preferences; everyone else gets Ctrl+,. CI runs this on all three.
+  const expected = process.platform === 'darwin' ? 'Cmd+,' : 'Ctrl+,'
+  assert.equal(resolveAccelerator('settings', undefined), expected)
+})
+
+test('a user override beats the platform default for Settings too', () => {
+  assert.equal(resolveAccelerator('settings', { settings: 'Ctrl+Alt+P' }), 'Ctrl+Alt+P')
+})

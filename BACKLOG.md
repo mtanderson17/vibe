@@ -4,7 +4,8 @@ Planned work, in the repo so it survives between sessions. Shipped work lives in
 `git log`, not here — an item leaves this file when it lands.
 
 **#66 is the keystone.** Four of the eight open items (#73, #74, #75, and the
-install half of #67) are blocked on packaging existing.
+install half of #67) are blocked on packaging existing — as is the Electron
+smoke job that would close most of what's still unverified.
 
 ---
 
@@ -154,24 +155,73 @@ Once there are real numbers, look at:
 
 Blocked on #66. Ties into #74.
 
+### Bug · `launch_app` output is lost on Windows
+
+`launchApp` spawns with `detached: true` through `cmd.exe`. On Windows that puts
+the grandchild on a new console, so nothing reaches the pipes we set up:
+`earlyOutput` and `tailApp` are **always empty on Windows**.
+
+User-visible consequence: when a launched app dies inside the 1.5 s window, the
+error says *"the command likely does not exist on PATH, or a launcher script
+exited immediately"* regardless of what actually happened — so a script that
+threw a real error reports a misleading cause.
+
+Demonstrated with a spawn matrix; `detached` is the variable, not `/s` quote
+stripping:
+
+| spawn | captured |
+|---|---|
+| `cmd.exe` + detached (current behaviour) | *nothing* |
+| `cmd.exe`, not detached | `died` |
+| `node` directly + detached | `died` |
+
+The trade-off to settle: `detached: true` is what lets a launched app outlive
+Vibe, which is the point of `launch_app`. Options are to keep detached and find
+another way to capture output (a log file the child redirects into, which also
+fixes `tailApp` after a restart), or to spawn without the intermediate shell on
+Windows when the command needs no shell features.
+
+`tests/platform.test.ts` asserts the good behaviour on macOS/Linux and skips
+Windows with a pointer here — remove that guard as part of the fix.
+
 ---
 
 ## Verification owed
 
-Not code — someone has to run the app and look. Carried over from the
-2026-09-12 audit.
+Shrinking. `tests/platform.test.ts` now covers `run_bash` and `launch_app`
+against the real shell on all three CI platforms, and the Settings accelerator
+branch. What's left genuinely needs a human, or an Electron runtime:
 
+- **Does the app even launch on macOS and Linux?** Nobody has run the GUI
+  there. CI proves typecheck, tests and `npm run build` pass; it never boots
+  Electron. One manual run on each would answer this faster than any
+  automation.
 - Menu-bar visibility on Windows and Linux after a keybinding change
   (`electron/main/index.ts` hardcodes `autoHideMenuBar: false`)
 - Provider-chain fallback surfacing when the primary model fails — does the UI
   make it clear which model actually served the turn?
 - Merge against a stale branch ref, with the worktree deleted mid-flow
+- **`safeStorage` encryption has never been executed by a test on any
+  platform.** `tests/secretstore.test.ts` can only assert the plaintext
+  fallback, because `isEncryptionAvailable()` returns false outside Electron —
+  so the path every real user's API keys take is unverified. Needs the Electron
+  smoke job below.
 
 ---
 
-## CD, when #66 lands
+## CI, and CD when #66 lands
 
 CI runs typecheck + test + build on Linux/Windows/macOS
 (`.github/workflows/ci.yml`). There is deliberately no release workflow yet —
 there's nothing to publish until electron-builder config and signing certs
 exist. Adding the release job is part of #66.
+
+**Electron smoke job — deferred to #66, on purpose.** Booting the app in CI
+(xvfb on Linux) would cover window creation, menu construction, quit
+behaviour, the menu-bar item above, and the `safeStorage` gap. Deferred
+because at #66 there will be packaged artifacts, and smoke-testing the packaged
+app is strictly more valuable than smoke-testing `electron-vite preview` —
+otherwise the harness gets built twice and only the second one matters. The
+secondary reason: Electron-in-CI is flaky (xvfb, sandbox flags, GPU quirks,
+slow macOS runners), and a job that goes red at random trains everyone to
+ignore CI.

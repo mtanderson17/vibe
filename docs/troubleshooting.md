@@ -96,6 +96,15 @@ reflect a packaged build, so there's no point tuning against it. See
 after 3 s idle, so the first click on Files is quick but a very early click may
 show a loading state.
 
+## A launched app died and Vibe says "likely does not exist on PATH"
+
+On Windows, take that message with salt. Launched processes are spawned
+detached through `cmd.exe`, which puts them on a separate console — so their
+output never reaches Vibe and you get the generic hint no matter what actually
+went wrong. Run the same command in a terminal to see the real error. Tracked
+in [BACKLOG.md](../BACKLOG.md); on macOS and Linux the message does carry the
+process's own output.
+
 ## Something else
 
 Open an issue with: what you asked the agent to do, the model chain, the agent
