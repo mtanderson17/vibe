@@ -525,6 +525,85 @@ tasks mid-run instead of only at the PM agent's post-merge pass.
 Small, and it composes with #88: an agent that discovers hidden work can add a
 node to the graph rather than silently expanding its own scope.
 
+### #93 · Verify the merged result, not just the branch
+
+`mergeBranch` runs `git merge --no-ff` and returns `ok: true` whenever git
+didn't error. **"ok" means git merged it, not that the result works.** Nothing
+runs the tests or the typechecker on the merged state.
+
+That leaves a whole class of failure unhandled, and it's the expensive one.
+Git's conflict detection is line-based and has no model of meaning, so these
+all merge *cleanly*:
+
+- A renames a function; B adds a new caller of the old name → broken build
+- A changes a function's contract (extra param, different return shape); B
+  writes code against the old one → runtime bug
+- A deletes a config key; B starts reading it
+- A and B independently add the same helper in different files → no error at
+  all, just duplication that rots
+
+The AI conflict resolver never sees any of it, because it only fires when there
+are conflict markers. **The conflicts an LLM is good at fixing are exactly the
+ones git can find — and those are the cheap ones.** This is the residue.
+
+The fix is not another model call. Run the project's verification on the merged
+state before keeping it: zero tokens, deterministic, and it catches the
+rename-and-caller case immediately. `--no-ff` already helps here — every merge
+is a single commit, so rollback is one revert.
+
+Relationship to #83/#89: those verify **a branch in isolation**. This verifies
+**the merge**. Both are needed and neither substitutes for the other — a branch
+that passes on its own can still break main, which is the entire point.
+
+The escalation ladder this creates:
+
+| Merge state | Verification | Action |
+|---|---|---|
+| clean | green | land it |
+| conflicts | — | AI resolver (exists, and is good at this) |
+| **clean** | **red** | **the hard case — and nobody in the survey handles it**, because every Tier-2 tool gates on the PR, not on the merge result |
+
+First version is small: run typecheck + tests after the merge, show the result
+in the merge banner, offer one-click rollback. The third row can start as
+"tell the human loudly" and grow into handing it back to whichever agent's
+change broke it.
+
+### #94 · Experiment: log write collisions (do not block yet)
+
+Demoted from a stronger proposal — cross-agent file locking, enforced in
+`tools.ts` at the moment of the write — after a good objection: AI resolves
+textual conflicts well, we already ship `resolver.ts`, so *preventing* that
+class buys little. #93 is where the real gap turned out to be.
+
+Two arguments still survive and are worth measuring rather than assuming:
+
+- **Wasted turns.** Even when the resolver succeeds, both agents spent tokens
+  and wall-clock producing work that gets reconciled away. On free models the
+  scarce resource is rate limit, not dollars, so redundant agent turns cost
+  real throughput.
+- **Distance degrades resolution.** The resolver sees conflict markers, not
+  intent — it is the least-informed participant in the pipeline. An agent told
+  "B owns `auth.ts`, work around it" still holds its full task context.
+
+So: **instrument first, decide later.** `executeTool` already receives
+`agentId`; keep a module-level map of repo-relative path → agent (via
+`resolveInside` + `path.relative`) and *log* would-be collisions on
+`write_file`/`replace_in_file` without blocking anything. Run it for a week of
+real use.
+
+If it never fires, the merge-time overlap warning was already sufficient and
+this dies here. If it fires constantly, we've found work being quietly thrown
+away. Only then decide between warn, deny, or redirect — and settle the
+questions that make the blocking version hard: file granularity is probably too
+coarse (two agents in different functions of one file is legitimate), reads
+must not take leases, and a blocked agent should be told to go elsewhere rather
+than queued, since queueing wastes its context.
+
+Worth noting it would survive #79: external CLI agents bypass `tools.ts`, but
+`--permission-prompts host` is the default and means Vibe is asked before their
+tools run — same registry, enforced natively for our agents and at
+approval time for theirs.
+
 ### Bug · `launch_app` output is lost on Windows
 
 `launchApp` spawns with `detached: true` through `cmd.exe`. On Windows that puts
@@ -608,9 +687,9 @@ agent maintaining a running summary and proposing tasks after each merge.
 That's a lighter-weight cousin of Bernstein's Janitor and Agent Orchestrator's
 milestone gates.
 
-The thing to be deliberate about: **#82 (merge queue) and #83 (verification
-evidence) are not ordinary features — together they are the Tier 1 → Tier 2
-transition.** Automated gates between "agent finished" and "code on main" is
+The thing to be deliberate about: **#82 (merge queue), #83 (verification
+evidence) and #93 (verifying the merged result) are not ordinary features —
+together they are the Tier 1 → Tier 2 transition.** Automated gates between "agent finished" and "code on main" is
 exactly what defines the boundary. That's a product decision about how much
 judgement to take away from the user, and it should be made on purpose rather
 than arrived at one PR at a time. Bernstein and Agent Orchestrator are the
