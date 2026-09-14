@@ -1,4 +1,19 @@
 {
+  // Solution file — the two referenced projects own the real build settings
+  // (`npm run typecheck` runs each one explicitly).
+  //
+  // `compilerOptions` + `include` exist only for editor/tsx resolution: tsx
+  // reads this file when transpiling tests, and only applies compilerOptions
+  // to files the config actually matches. Without `include`, .tsx tests fall
+  // back to the classic JSX runtime and blow up with "React is not defined".
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true
+  },
+  "include": ["src/**/*", "electron/**/*", "tests/**/*"],
   "files": [],
   "references": [
     { "path": "./tsconfig.node.json" },
