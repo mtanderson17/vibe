@@ -604,34 +604,31 @@ Worth noting it would survive #79: external CLI agents bypass `tools.ts`, but
 tools run — same registry, enforced natively for our agents and at
 approval time for theirs.
 
-### Bug · `launch_app` output is lost on Windows
+### Fixed · `launch_app` output was lost on Windows
 
-`launchApp` spawns with `detached: true` through `cmd.exe`. On Windows that puts
-the grandchild on a new console, so nothing reaches the pipes we set up:
-`earlyOutput` and `tailApp` are **always empty on Windows**.
+Fixed 2026-09-14. Kept briefly because the reasoning isn't obvious and the
+constraint still binds anyone touching `launcher.ts`.
 
-User-visible consequence: when a launched app dies inside the 1.5 s window, the
-error says *"the command likely does not exist on PATH, or a launcher script
-exited immediately"* regardless of what actually happened — so a script that
-threw a real error reports a misleading cause.
+`detached: true` means CREATE_NEW_CONSOLE on Windows, and an intermediate shell
+re-attaches its *children's* standard handles to that console. Every escape was
+measured and all of them fail: pipes, an inherited file descriptor, and the
+shell's own `>` redirect, under both cmd.exe and powershell. `node` spawned
+directly with detached keeps its output, and cmd's *own* stderr still arrives —
+which is why failures to **start** were visible while everything after was not.
 
-Demonstrated with a spawn matrix; `detached` is the variable, not `/s` quote
-stripping:
+The fix was to stop detaching on Windows, which turned out to cost nothing. The
+"keeps running after Vibe closes" rationale in the old comment is contradicted
+by `index.ts`, which calls `shutdownAllApps()` on both `window-all-closed` and
+`before-quit`; and `stopApp` uses `taskkill /T`, which kills the tree without
+needing a process group. Detaching is still correct on POSIX, where `stopApp`
+does `process.kill(-pid)` and needs the group — hence
+`DETACH = process.platform !== 'win32'` rather than dropping it outright.
 
-| spawn | captured |
-|---|---|
-| `cmd.exe` + detached (current behaviour) | *nothing* |
-| `cmd.exe`, not detached | `died` |
-| `node` directly + detached | `died` |
-
-The trade-off to settle: `detached: true` is what lets a launched app outlive
-Vibe, which is the point of `launch_app`. Options are to keep detached and find
-another way to capture output (a log file the child redirects into, which also
-fixes `tailApp` after a restart), or to spawn without the intermediate shell on
-Windows when the command needs no shell features.
-
-`tests/platform.test.ts` asserts the good behaviour on macOS/Linux and skips
-Windows with a pointer here — remove that guard as part of the fix.
+Output now goes to a log file through an inherited descriptor, so the command
+string reaches the shell untouched and the log outlives both the app and a Vibe
+restart (`tailApp` reads from it). `tests/platform.test.ts` asserts captured
+output unconditionally now — if that ever needs a platform guard again,
+something has regressed.
 
 ---
 

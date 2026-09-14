@@ -13,7 +13,7 @@ import { mkdtempSync, rmSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { executeTool } from '../electron/main/tools'
-import { launchApp, stopApp, listRunningApps, tailApp } from '../electron/main/launcher'
+import { launchApp, stopApp, listRunningApps, tailApp, readLogTail } from '../electron/main/launcher'
 
 // Canonical form of a path, for comparing against what a child process reports
 // as its cwd. `.native` rather than plain realpathSync because each OS mangles
@@ -161,17 +161,12 @@ test('launchApp: a command that exits immediately throws with its output', async
       (err: Error) => {
         assert.match(err.message, /exited within 1\.5s/)
         assert.match(err.message, /die\.mjs/)
-        if (process.platform !== 'win32') {
-          // The dead process's own output is what makes this error actionable.
-          //
-          // Excluded on Windows because it is currently always missing there:
-          // `detached: true` + an intermediate cmd.exe puts the grandchild on a
-          // new console, so nothing reaches our pipes and the user gets the
-          // generic "probably not on PATH" hint instead of the real error.
-          // See "launch_app output is lost on Windows" in BACKLOG.md — when
-          // that's fixed, drop this guard.
-          assert.match(err.message, /died/, 'the early output is the whole point of the message')
-        }
+        // The dead process's own output is what makes this error actionable.
+        // This was unobtainable on Windows until output moved to a log file:
+        // detached + an intermediate shell put the grandchild on a new console
+        // and nothing reached our pipes. The assertion is unconditional now and
+        // must stay that way — needing a platform guard here means a regression.
+        assert.match(err.message, /died/, 'the early output is the whole point of the message')
         return true
       }
     )
@@ -182,4 +177,61 @@ test('stopApp: an unknown pid reports failure instead of throwing', () => {
   const result = stopApp(999_999_999)
   assert.equal(result.ok, false)
   assert.match(result.message, /No tracked process/)
+})
+
+test('launchApp: a running app writes to a log file that tailApp can read', async () => {
+  const { dir, cleanup } = scratch()
+  let pid: number | undefined
+  try {
+    const cmd = writeScript(dir, 'chatty.mjs',
+      'console.log("started up")\nconsole.error("a warning")\nsetTimeout(() => {}, 30000)\n')
+    const app = await launchApp(cmd, dir)
+    pid = app.pid
+
+    assert.ok(app.logPath, 'launchApp should report where the output went')
+    assert.match(app.earlyOutput ?? '', /started up/)
+    assert.match(app.earlyOutput ?? '', /a warning/, 'stderr belongs in the same log as stdout')
+
+    const tail = tailApp(pid)
+    assert.equal(tail.ok, true)
+    assert.match(tail.output, /started up/, 'tailApp reads the log, not a dead in-memory buffer')
+
+    stopApp(pid)
+    await waitForExit(pid)
+    pid = undefined
+  } finally {
+    if (pid !== undefined) { stopApp(pid); await waitForExit(pid) }
+    cleanup()
+  }
+})
+
+test('launchApp: the command reaches the shell unmodified', async () => {
+  const { dir, cleanup } = scratch()
+  try {
+    // Output is captured through an inherited file descriptor rather than shell
+    // redirection, so nothing is appended to the command and it never has to
+    // survive cmd's quote mangling. A script echoing its own argv proves it.
+    writeFileSync(path.join(dir, 'argv.mjs'), 'console.log(process.argv.slice(2).join("|"))\n', 'utf8')
+    await assert.rejects(
+      () => launchApp('node argv.mjs alpha beta', dir),
+      (err: Error) => {
+        assert.match(err.message, /alpha\|beta/, 'arguments must arrive unmangled')
+        assert.doesNotMatch(err.message, /2>&1/, 'no redirection should be appended to the command')
+        return true
+      }
+    )
+  } finally { cleanup() }
+})
+
+test('readLogTail: missing file reads as empty, and long output is tail-truncated', () => {
+  const { dir, cleanup } = scratch()
+  try {
+    assert.equal(readLogTail(path.join(dir, 'nope.log')), '')
+
+    const logPath = path.join(dir, 'big.log')
+    writeFileSync(logPath, 'x'.repeat(500) + 'THE-END', 'utf8')
+    const tail = readLogTail(logPath, 100)
+    assert.equal(tail.length, 100)
+    assert.match(tail, /THE-END$/, 'truncation must keep the END of the log, not the start')
+  } finally { cleanup() }
 })

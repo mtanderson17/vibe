@@ -96,14 +96,13 @@ reflect a packaged build, so there's no point tuning against it. See
 after 3 s idle, so the first click on Files is quick but a very early click may
 show a loading state.
 
-## A launched app died and Vibe says "likely does not exist on PATH"
+## A launched app died and I want to see why
 
-On Windows, take that message with salt. Launched processes are spawned
-detached through `cmd.exe`, which puts them on a separate console — so their
-output never reaches Vibe and you get the generic hint no matter what actually
-went wrong. Run the same command in a terminal to see the real error. Tracked
-in [BACKLOG.md](../BACKLOG.md); on macOS and Linux the message does carry the
-process's own output.
+The error carries the process's own output on all three platforms. For more
+than the tail, every launched app writes a full log to a file — `launch_app`
+reports its path, and `tailApp` reads from it, so the log outlives the app and
+even a Vibe restart. Logs live in your OS temp directory under
+`vibe-app-logs/` and are pruned after seven days.
 
 ## Something else
 
