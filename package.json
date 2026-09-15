@@ -36,7 +36,7 @@
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^5.2.0",
-    "electron": "^33.2.1",
+    "electron": "^44.3.0",
     "electron-vite": "^5.0.0",
     "happy-dom": "^20.14.5",
     "png2icons": "^2.0.1",

@@ -25,7 +25,7 @@ Modern coding is drifting from "human writes code" to "human directs agents." Ex
 
 ## Quick start (60 seconds)
 
-Requires Node 20+ and Git 2.5+.
+Requires Node 20.19+ (or 22.12+) and Git 2.5+.
 
 ```bash
 git clone https://github.com/mtanderson17/vibe.git

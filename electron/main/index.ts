@@ -121,6 +121,23 @@ app.on('before-quit', () => {
   disconnectMcp().catch(() => {})
 })
 
+/**
+ * Options for the "choose a project folder" dialog.
+ *
+ * `defaultPath` is explicit because Electron 43 changed the default: the dialog
+ * used to reopen wherever you last were, and now starts in Downloads. Nobody
+ * keeps their repos in Downloads, so point it at the current project (or the
+ * last one used) and let the OS remember from there.
+ */
+function pickFolderOptions(): Electron.OpenDialogOptions {
+  const cfg = getConfig()
+  const defaultPath = cfg.workspacePath ?? cfg.recentWorkspaces?.[0]
+  return {
+    properties: ['openDirectory', 'createDirectory'],
+    ...(defaultPath ? { defaultPath } : {})
+  }
+}
+
 function registerIpc(): void {
   ipcMain.handle('config:get', () => getConfig())
   ipcMain.handle('config:set', (_e, partial) => setConfig(partial))
@@ -220,7 +237,7 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('workspace:pick', async () => {
-    const res = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] })
+    const res = await dialog.showOpenDialog(pickFolderOptions())
     if (res.canceled || !res.filePaths[0]) return null
     const workspacePath = res.filePaths[0]
     setConfig({ workspacePath })
@@ -233,7 +250,7 @@ function registerIpc(): void {
   ipcMain.handle('workspace:switch', async (_e, path?: string) => {
     let target = path
     if (!target) {
-      const res = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] })
+      const res = await dialog.showOpenDialog(pickFolderOptions())
       if (res.canceled || !res.filePaths[0]) return null
       target = res.filePaths[0]
     }

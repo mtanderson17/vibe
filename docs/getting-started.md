@@ -5,7 +5,11 @@ waiting on the agent.
 
 ## Requirements
 
-- **Node 20+** and **Git 2.5+** (worktrees need 2.5)
+- **Node 20.19+ or 22.12+** (the floor comes from vite 7) and **Git 2.5+**
+  (worktrees need 2.5)
+- **macOS Ventura or newer** if you're on a Mac — Electron 44 dropped Monterey.
+  Windows and Linux need a 64-bit build; 32-bit Windows and ARM Linux binaries
+  are no longer published upstream.
 - A model to talk to — one of:
   - An [OpenRouter](https://openrouter.ai) key (free signup, no card)
   - [Ollama](https://ollama.com) running locally with a tool-capable model

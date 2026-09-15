@@ -7,11 +7,9 @@ Planned work, in the repo so it survives between sessions. Shipped work lives in
 #67) are blocked on packaging existing — as is the Electron smoke job that
 would close most of what's still unverified.
 
-**But the dependency upgrade comes first.** Electron is eleven majors behind
-(33 vs 44) with seven high-severity advisories open, including a context
-isolation bypass — which voids the exact guarantee the README makes about the
-renderer. Shipping signed installers on that runtime would mean shipping the
-bypass to every user and re-shipping later. See "Runtime upgrade" below.
+**The dependency upgrade that was blocking it is done** — Electron 33 → 44,
+open advisories 7 → 2. See "Runtime upgrade" below. The two that remain come
+from `monaco-editor`'s bundled `dompurify` and are tracked there.
 
 **#76 (pre-warm worktrees) is done**, along with the Windows `launch_app`
 output bug — see the Done entries below.
@@ -872,7 +870,47 @@ branch. What's left genuinely needs a human, or an Electron runtime:
 
 ---
 
-## Runtime upgrade · Electron 33 → 44 (do before #66)
+## Done · Runtime upgrade, Electron 33 → 44
+
+Landed 2026-09-15, in two commits so either half can be reverted alone.
+**Open advisories went from 7 to 2** — every Electron one cleared, including
+the context isolation bypass that voided the README's claim about the renderer,
+plus `vite` and (transitively) `extract-zip`.
+
+What it actually took, against the scoping below:
+
+- Toolchain: `vite` 5.4 → 7.3, `electron-vite` 2.3 → 5.0,
+  `@vitejs/plugin-react` 4.7 → 5.2. The version choice is pinched from both
+  sides: electron-vite 5 peers `vite ^5 || ^6 || ^7` so vite 8 is out, and
+  plugin-react 6 requires vite ^8 — 5.2 is the only version that accepts vite
+  7. Node floor rises to `^20.19 || >=22.12`.
+- Electron 33 → 44.3.0. `npm install` removed 54 packages, which is the v42
+  change where Electron stopped self-downloading via postinstall.
+- The `dialog` `defaultPath` change (v43) was, as predicted, the **only** code
+  edit needed: see `pickFolderOptions()` in `index.ts`. Nobody keeps repos in
+  Downloads.
+- Typecheck passed with no changes at all against the new Electron types, which
+  is the payoff for using such a narrow slice of the API.
+
+Verified by launching the built app and driving it over Electron's remote
+debugging port (Node 24 has a built-in `WebSocket`, so this needed no
+Playwright): window opens, renderer mounts the Control Center shell,
+`window.vibe.config.get` is still a function through the contextBridge, zero
+renderer errors, main process silent. That script is worth rebuilding as the
+basis of the smoke job in the CI section below.
+
+**Still outstanding — both from the scoping, neither done:**
+
+- `monaco-editor` >= 0.54 bundles a vulnerable `dompurify` (the 2 remaining
+  advisories). npm's fix is to *downgrade* 0.56 → 0.53. Monaco renders
+  workspace file content, so it isn't theoretical. Deliberately not folded into
+  this upgrade — decide it separately once someone checks whether a patched
+  Monaco has shipped.
+- The app has still only been **run** on Windows. CI proves typecheck, tests
+  and build on all three; nothing has launched it on macOS or Linux, where v38
+  (Wayland/GTK 4) and the v34 fullscreen menu-bar change are the open risks.
+
+### Original scoping, kept for the reasoning
 
 Scoped 2026-09-14 against the
 [Electron breaking-changes doc](https://www.electronjs.org/docs/latest/breaking-changes).
