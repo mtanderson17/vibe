@@ -15,7 +15,22 @@ waiting on the agent.
   - [Ollama](https://ollama.com) running locally with a tool-capable model
   - A direct key for Anthropic, OpenAI, Gemini, Groq, or xAI
 
-There is no packaged installer yet — see [#66](../BACKLOG.md). For now:
+### Install
+
+Installers are built for all three platforms but are **not code-signed yet**,
+so the OS will object the first time:
+
+- **macOS** — right-click the app → **Open**, then confirm. Gatekeeper blocks a
+  plain double-click on an unsigned app.
+- **Windows** — SmartScreen shows a warning; **More info** → **Run anyway**.
+- **Linux** — the AppImage needs the executable bit: `chmod +x Vibe-*.AppImage`.
+  The `.deb` installs normally.
+
+Signing certificates are the remaining half of [#66](../BACKLOG.md). Until
+that's done, treat these as builds for people who know what they're
+downloading.
+
+### Or run from source
 
 ```bash
 git clone https://github.com/mtanderson17/vibe.git
@@ -23,6 +38,10 @@ cd vibe
 npm install
 npm run dev
 ```
+
+To produce installers yourself: `npm run package` (or `npm run package:dir` for
+an unpacked build, which is faster and enough to try). Output lands in
+`release/`.
 
 ## First run
 

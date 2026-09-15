@@ -141,19 +141,56 @@ file. And comparing a path against a child's reported cwd needs
 temp dir is an 8.3 short path (`C:\Users\RUNNER~1\…`) that only the native call
 expands to the long form the child reports.
 
+## Packaging
+
+`electron-builder.yml` drives it; `npm run package` produces installers into
+`release/`, and `npm run package:dir` produces just the unpacked app (faster,
+and what CI uses).
+
+Two things in that config are load-bearing and easy to break:
+
+- **`appId` must stay `com.vibe.app`**, matching the
+  `app.setAppUserModelId()` call in `electron/main/index.ts`. If they diverge,
+  Windows treats the running app and its shortcuts as separate identities and
+  taskbar pinning and notifications break.
+- **`branding/icons/**` is in `files`, not `extraResources`**, because
+  `appIconPath()` resolves it against `app.getAppPath()` — which points *inside*
+  `app.asar` in a packaged build. Moving it to `extraResources` would put it
+  next to the asar instead and the window icon would silently vanish.
+
+Artifacts are unsigned. Signing needs an Apple Developer certificate plus
+notarization and an Authenticode certificate; see #66.
+
 ## Smoke test
 
-`npm run build && npm run smoke` launches the built app and checks it actually
-starts: window opens, renderer mounts DOM, a known screen renders, the
-contextBridge exposes `window.vibe`, and nothing logs an error. It drives
-Electron over its remote debugging port with Node's built-in `WebSocket`, so it
-needs no Playwright and no extra dependency. On Linux it needs a display:
-`xvfb-run -a npm run smoke`.
+`scripts/smoke.mjs` launches the app and checks it actually starts: window
+opens, renderer mounts DOM, a known screen renders, every image loaded, the
+contextBridge exposes `window.vibe`, and nothing in *our* code logs an error.
+It drives Electron over its remote debugging port with Node's built-in
+`WebSocket`, so it needs no Playwright and no extra dependency.
+
+Two modes:
+
+```bash
+npm run build && npm run smoke                  # the dev build in out/
+npm run package:dir && npm run smoke:packaged   # the real packaged app
+```
+
+**CI runs the packaged mode**, because that's the only one that exercises asar
+path resolution — the classic packaging failure is a file that exists in the
+repo and is missing from the bundle, and the dev build can't catch it. On Linux
+a display is needed: `xvfb-run -a npm run smoke:packaged`.
 
 This is the only thing that covers Electron booting at all — the unit suite
-structurally cannot. CI runs it on all three platforms as a separate job from
-`check`, deliberately: it's the most likely thing to be flaky, and a red
-`check` should always mean real breakage.
+structurally cannot. It's a separate job from `check` deliberately: launching a
+GUI in CI is the most likely thing here to be flaky, and a red `check` should
+always mean real breakage.
+
+Renderer errors are classified by origin. Electron logs some of its own startup
+failures into the renderer console from `node:electron/js2c/*` — on the Windows
+runner it reliably emits two — so the check fails only on errors traceable to
+our code. If that ever hides something real, narrow the predicate rather than
+widening it.
 
 What even the smoke test doesn't reach yet: `safeStorage` round-trips and menu
 construction. See BACKLOG.md.

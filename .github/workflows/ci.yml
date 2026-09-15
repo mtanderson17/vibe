@@ -56,6 +56,11 @@ jobs:
   # the bundle builds; nothing there boots Electron, opens a window, or mounts
   # the renderer. Until this existed, "it runs on macOS" was an assumption.
   #
+  # This packages the app and smokes the *packaged* build rather than the dev
+  # output, because packaging is where a path resolved against app.getAppPath()
+  # silently stops existing. `--dir` skips installer creation, which is the slow
+  # part and not what we're testing here.
+  #
   # Kept as its own job, one Node version per platform: it is the most likely
   # thing here to be flaky, and a red `check` should always mean real breakage.
   smoke:
@@ -77,14 +82,14 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Build
-        run: npm run build
+      - name: Package (unpacked)
+        run: npm run package:dir
 
       # Linux runners are headless, so Electron needs a virtual display.
-      - name: Smoke (Linux, under xvfb)
+      - name: Smoke the packaged app (Linux, under xvfb)
         if: runner.os == 'Linux'
-        run: xvfb-run -a --server-args="-screen 0 1400x900x24" npm run smoke
+        run: xvfb-run -a --server-args="-screen 0 1400x900x24" npm run smoke:packaged
 
-      - name: Smoke
+      - name: Smoke the packaged app
         if: runner.os != 'Linux'
-        run: npm run smoke
+        run: npm run smoke:packaged

@@ -2,6 +2,9 @@
   "name": "vibe",
   "version": "0.0.1",
   "description": "Command center for agent-driven development",
+  "author": "mtanderson17",
+  "license": "MIT",
+  "homepage": "https://github.com/mtanderson17/vibe",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -10,6 +13,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "node scripts/run-tests.mjs",
     "smoke": "node scripts/smoke.mjs",
+    "smoke:packaged": "node scripts/smoke.mjs --packaged",
+    "package": "npm run build && electron-builder",
+    "package:dir": "npm run build && electron-builder --dir",
     "build:icons": "node scripts/build-icons.mjs"
   },
   "//overrides": "monaco-editor pins dompurify to an exact 3.4.8, which has four XSS advisories (fixed in 3.4.15) and is reachable because Monaco sanitizes the markdown it renders in hovers. The latest Monaco (0.56) still pins 3.4.8, so the alternative was downgrading Monaco three minor versions. 3.4.15 is a patch bump within the same series. Drop this once Monaco ships a patched pin.",
@@ -42,6 +48,7 @@
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^44.3.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "happy-dom": "^20.14.5",
     "png2icons": "^2.0.1",

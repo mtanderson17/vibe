@@ -2,6 +2,8 @@
 node_modules/
 out/
 dist/
+# electron-builder artifacts — hundreds of MB per platform
+release/
 *.tsbuildinfo
 
 # Vibe runtime state (never commit worktrees or agent state)

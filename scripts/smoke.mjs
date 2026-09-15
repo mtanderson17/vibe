@@ -9,31 +9,75 @@
 // Driven over Electron's remote debugging port using Node's built-in
 // WebSocket, so it needs no Playwright and no extra dependency.
 //
-// Usage: npm run build && npm run smoke
+// Usage:
+//   npm run build && npm run smoke              — the dev build in out/
+//   npm run package:dir && npm run smoke:packaged — the real packaged app
+//
+// The packaged mode is the more meaningful one: it is the only thing that
+// exercises asar path resolution, so it catches the classic packaging failure
+// where a file resolved relative to app.getAppPath() exists in the repo and is
+// missing from the bundle.
+//
 // On Linux a display is required: xvfb-run -a npm run smoke
 
 import { spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import electronPath from 'electron'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const PORT = Number(process.env.SMOKE_PORT ?? 9222)
+const packaged = process.argv.includes('--packaged')
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
-if (!existsSync(path.join(repoRoot, 'out', 'main', 'index.js'))) {
-  console.error('No build found at out/main/index.js — run `npm run build` first.')
-  process.exit(1)
+/** Locate the binary electron-builder --dir produced for this platform. */
+function packagedBinary() {
+  const releaseDir = path.join(repoRoot, 'release')
+  if (!existsSync(releaseDir)) return null
+  const entries = readdirSync(releaseDir, { withFileTypes: true })
+    .filter(e => e.isDirectory() && e.name.includes('unpacked') || e.name.startsWith('mac'))
+
+  for (const entry of entries) {
+    const dir = path.join(releaseDir, entry.name)
+    const candidates = process.platform === 'win32'
+      ? [path.join(dir, 'Vibe.exe')]
+      : process.platform === 'darwin'
+        ? [path.join(dir, 'Vibe.app', 'Contents', 'MacOS', 'Vibe')]
+        : [path.join(dir, 'vibe'), path.join(dir, 'Vibe')]
+    const found = candidates.find(existsSync)
+    if (found) return found
+  }
+  return null
 }
 
-const args = ['.', `--remote-debugging-port=${PORT}`]
+let binary, args
+if (packaged) {
+  binary = packagedBinary()
+  if (!binary) {
+    console.error('No packaged app found under release/ — run `npm run package:dir` first.')
+    process.exit(1)
+  }
+  // A packaged app already knows its own entry point; passing '.' would make it
+  // treat the cwd as the app to load.
+  args = [`--remote-debugging-port=${PORT}`]
+  console.log(`target: packaged  ${path.relative(repoRoot, binary)}`)
+} else {
+  if (!existsSync(path.join(repoRoot, 'out', 'main', 'index.js'))) {
+    console.error('No build found at out/main/index.js — run `npm run build` first.')
+    process.exit(1)
+  }
+  binary = electronPath
+  args = ['.', `--remote-debugging-port=${PORT}`]
+  console.log('target: dev build in out/')
+}
+
 // CI Linux runners have unprivileged user namespaces locked down, which the
 // Chromium sandbox needs. Only relax it there.
 if (process.platform === 'linux') args.push('--no-sandbox')
 
 const mainOutput = []
-const child = spawn(electronPath, args, {
+const child = spawn(binary, args, {
   cwd: repoRoot,
   stdio: ['ignore', 'pipe', 'pipe'],
   windowsHide: true,
@@ -140,6 +184,13 @@ try {
     true
   )
   check('body has visible text', await evaluate('document.body.innerText.trim().length > 0'), true)
+  // Vacuously true when the screen has no images, but catches the classic
+  // packaging failure where a bundled asset is missing from the build output.
+  check(
+    'every image loaded',
+    await evaluate('Array.from(document.images).every(i => i.complete && i.naturalWidth > 0)'),
+    true
+  )
 
   const errors = client.events.filter(e =>
     (e.method === 'Runtime.consoleAPICalled' && e.params.type === 'error') ||

@@ -1,0 +1,60 @@
+# Packaging config (#66). Produces unsigned artifacts today — see the signing
+# note in BACKLOG.md for what's still missing before public distribution.
+#
+# appId matches the `app.setAppUserModelId('com.vibe.app')` call in
+# electron/main/index.ts; they have to agree or Windows treats the running app
+# and its shortcuts as different identities (broken taskbar pinning and
+# notifications).
+appId: com.vibe.app
+productName: Vibe
+copyright: MIT licensed
+
+directories:
+  output: release
+  buildResources: branding
+
+# `out/**` is what electron-vite produced. branding/icons is included rather
+# than shipped as an extraResource because appIconPath() resolves it relative to
+# app.getAppPath(), which points inside app.asar in a packaged build.
+files:
+  - out/**
+  - branding/icons/**
+  - package.json
+
+asar: true
+
+# electron-builder would otherwise try to rebuild native modules; there are
+# none at runtime (every runtime dependency is pure JS, which is deliberate —
+# see #80) so skip the step entirely.
+npmRebuild: false
+
+win:
+  target:
+    - nsis
+    - zip
+  icon: branding/icons/icon.ico
+
+nsis:
+  # A per-user install needs no elevation, and letting people choose the
+  # directory is worth the extra click for a developer tool.
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+
+mac:
+  target:
+    - dmg
+    - zip
+  icon: branding/icons/icon.icns
+  category: public.app-category.developer-tools
+  # Vibe runs git and shells out constantly; the hardened runtime without
+  # notarization just makes that fail in confusing ways. Revisit with signing.
+  hardenedRuntime: false
+
+linux:
+  target:
+    - AppImage
+    - deb
+  icon: branding/icons/icon-512.png
+  category: Development
+  synopsis: Command center for agent-driven development

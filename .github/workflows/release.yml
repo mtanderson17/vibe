@@ -1,0 +1,82 @@
+name: Release
+
+# Builds installers for all three platforms and attaches them to a GitHub
+# Release. Triggered by pushing a tag, or by hand from the Actions tab (which
+# uploads the artifacts to the run without publishing a release).
+#
+# IMPORTANT: these artifacts are UNSIGNED. macOS will refuse to open the app
+# without a right-click → Open (Gatekeeper), and Windows will show a SmartScreen
+# warning. Signing needs an Apple Developer certificate plus notarization, and
+# an Authenticode certificate — both are purchases, and both are the remaining
+# half of #66. Don't announce these as a general-audience download until then.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to create the release and upload assets
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Guard the release path with the same checks as CI — a tag should never
+      # produce an installer that the test suite would have rejected.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Package installers
+        run: npm run package
+        env:
+          # Tell electron-builder not to attempt signing or notarization.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-${{ matrix.os }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            release/*.exe
+            release/*.zip
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          fail_on_unmatched_files: false
+          body: |
+            Unsigned builds. macOS: right-click → Open the first time
+            (Gatekeeper). Windows: SmartScreen will warn — "More info" →
+            "Run anyway". Code signing is tracked in BACKLOG.md (#66).
+          files: |
+            release/*.exe
+            release/*.zip
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb

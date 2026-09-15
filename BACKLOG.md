@@ -3,9 +3,10 @@
 Planned work, in the repo so it survives between sessions. Shipped work lives in
 `git log`, not here — an item leaves this file when it lands.
 
-**#66 is the keystone.** Four items (#73, #74, #75, and the install half of
-#67) are blocked on packaging existing — as is the Electron smoke job that
-would close most of what's still unverified.
+**#66 was the keystone and is now half done** — the app packages, the artifacts
+run on all three platforms, and a tag builds a draft release. What remains is
+code signing, which is a certificate purchase rather than a coding task. That
+unblocks #73, #74, #75 and the install half of #67.
 
 **The dependency upgrade that was blocking it is done** — Electron 33 → 44,
 open advisories 7 → 2. See "Runtime upgrade" below. The two that remain come
@@ -23,20 +24,35 @@ parallelism — the thing the product is sold on — increases.
 
 ## Open
 
-### #66 · Cross-platform package manager install
+### #66 · Packaging and distribution — **half done**
 
-One-line install from the CLI on all three platforms:
+**Done 2026-09-15: the app packages and the artifacts run.**
+`electron-builder.yml` produces NSIS + zip on Windows, dmg + zip on macOS, and
+AppImage + deb on Linux. `npm run package` builds installers into `release/`;
+`npm run package:dir` builds just the unpacked app. `.github/workflows/release.yml`
+builds all three on a `v*` tag and attaches them to a draft release, after
+running typecheck and tests so a tag can't ship something CI would have
+rejected. CI's smoke job now packages and launches the *packaged* app on every
+platform, which is what actually covers asar path resolution.
 
-- macOS — `brew install vibe` (or similar)
-- Linux — `.deb` / `.rpm` / AppImage + apt repo, or a `curl | sh` script
-- Windows — `winget install vibe` or Scoop
+Two config details are load-bearing, documented in `docs/architecture.md`:
+`appId` must match the `setAppUserModelId()` call, and `branding/icons/**` has
+to be in `files` (inside the asar) rather than `extraResources`, because
+`appIconPath()` resolves against `app.getAppPath()`.
 
-Requires electron-builder config with signed builds. macOS needs an Apple
-Developer cert plus notarization; Windows needs an Authenticode code-signing
-cert. Linux is the easy one — a self-signed AppImage works.
+**Still to do — and it's a purchase, not a coding task:**
 
-Paired with #73: users who install via a package manager still need a
-"new version available" path.
+- **Code signing.** Artifacts are unsigned, so macOS needs right-click → Open
+  (Gatekeeper) and Windows shows SmartScreen. Needs an Apple Developer
+  certificate (~$99/yr) plus notarization, and an Authenticode certificate.
+  Until then these are builds for people who know what they're downloading —
+  the release notes say so.
+- **Package managers.** `brew install vibe`, `winget install vibe` or Scoop, an
+  apt repo or `curl | sh`. All of these want signed artifacts first, and most
+  want a published release history.
+
+Unblocks #73 (auto-update), #74 (onboarding), #75 (measuring real launch
+speed), and the install half of #67.
 
 ### #67 · Documentation
 

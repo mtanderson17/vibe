@@ -152,10 +152,13 @@ your-project/
 npm run dev         # Electron dev with hot reload
 npm run build       # Production build
 npm run typecheck   # tsc across main + renderer
-npm test            # Node's built-in test runner via tsx (221 tests)
+npm test            # Node's built-in test runner via tsx (258 tests)
+npm run package     # installers into release/ (package:dir for unpacked)
+npm run smoke       # launch the app and verify it starts
 ```
 
-CI runs all three on Linux, Windows, and macOS for every push and PR.
+CI runs typecheck, tests and build on Linux, Windows and macOS for every push
+and PR, plus a smoke job that packages the app and launches it on each.
 
 ## Known issues / rough edges
 
@@ -173,8 +176,10 @@ Being upfront about the state of the app while it's still stabilizing:
   worst case regardless.
 - **UI polish is uneven.** Some screens (Control Center, Cost) are tight; others
   (Setup, Merge conflict banner) could use another pass.
-- **No packaged install yet.** `git clone` + `npm run dev` is the only path.
-  Packaging and auto-update are [#66 and #73](BACKLOG.md).
+- **Installers are unsigned.** They build for all three platforms, but macOS
+  needs a right-click → Open the first time and Windows shows a SmartScreen
+  warning. Signing certificates are the remaining half of [#66](BACKLOG.md);
+  auto-update is [#73](BACKLOG.md).
 - **No sandboxing on `run_bash`.** Agents can install packages globally,
   read/modify files outside the worktree via shell, etc. The approval gate
   catches a short list of dangerous patterns — it's a speed bump, not a
