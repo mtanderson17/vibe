@@ -36,13 +36,13 @@
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^5.2.0",
-    "electron": "^33.2.1",
+    "electron": "^39.8.10",
     "electron-vite": "^5.0.0",
     "happy-dom": "^20.14.5",
     "png2icons": "^2.0.1",
     "sharp": "^0.35.4",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vite": "^7.3.6"
+    "vite": "^8.3.0"
   }
 }
