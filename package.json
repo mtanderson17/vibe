@@ -12,6 +12,10 @@
     "smoke": "node scripts/smoke.mjs",
     "build:icons": "node scripts/build-icons.mjs"
   },
+  "//overrides": "monaco-editor pins dompurify to an exact 3.4.8, which has four XSS advisories (fixed in 3.4.15) and is reachable because Monaco sanitizes the markdown it renders in hovers. The latest Monaco (0.56) still pins 3.4.8, so the alternative was downgrading Monaco three minor versions. 3.4.15 is a patch bump within the same series. Drop this once Monaco ships a patched pin.",
+  "overrides": {
+    "dompurify": "3.4.15"
+  },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.50",
     "@ai-sdk/google": "^4.0.65",

@@ -146,12 +146,51 @@ try {
     e.method === 'Runtime.exceptionThrown' ||
     (e.method === 'Log.entryAdded' && e.params.entry.level === 'error')
   )
-  check('no renderer errors', errors.length, 0)
-  for (const e of errors.slice(0, 10)) {
-    const text = e.params?.entry?.text
+
+  // Electron logs some of its own startup failures into the renderer console
+  // from inside its bundled js2c code. On the Windows CI runner it reliably
+  // emits "sandboxed_renderer.bundle.js script failed to run" plus a
+  // destructure of a null `binding.startupData` — both from
+  // node:electron/js2c/sandbox_bundle, neither from us, and demonstrably not
+  // fatal: the contextBridge check above passes in the same run.
+  //
+  // So classify by origin rather than suppressing wholesale. Anything traceable
+  // to our own code still fails the run; Electron's internals are reported and
+  // moved past. If this ever hides something real, the fix is to narrow the
+  // predicate, not to widen it.
+  const INTERNAL = /node:electron|sandbox(ed)?_(renderer|bundle)|js2c/
+  const describe = e => ({
+    text: String(
+      e.params?.entry?.text
       ?? e.params?.exceptionDetails?.text
       ?? (e.params?.args ?? []).map(a => a.value ?? a.description).join(' ')
-    console.log(`        ${e.method}: ${String(text).slice(0, 300)}`)
+    ),
+    urls: [
+      e.params?.entry?.url,
+      e.params?.exceptionDetails?.url,
+      ...(e.params?.stackTrace?.callFrames ?? []).map(f => f.url),
+      ...(e.params?.exceptionDetails?.stackTrace?.callFrames ?? []).map(f => f.url)
+    ].filter(Boolean)
+  })
+
+  const classified = errors.map(e => {
+    const { text, urls } = describe(e)
+    const internal = INTERNAL.test(text) || (urls.length > 0 && urls.every(u => INTERNAL.test(u)))
+    return { method: e.method, text, internal }
+  })
+
+  const appErrors = classified.filter(e => !e.internal)
+  const internalErrors = classified.filter(e => e.internal)
+
+  check('no renderer errors from our code', appErrors.length, 0)
+  for (const e of appErrors.slice(0, 10)) {
+    console.log(`        ${e.method}: ${e.text.slice(0, 300)}`)
+  }
+  if (internalErrors.length) {
+    console.log(`note  ${internalErrors.length} Electron-internal console error(s), not failing the run:`)
+    for (const e of internalErrors.slice(0, 5)) {
+      console.log(`        ${e.text.split('\n')[0].slice(0, 200)}`)
+    }
   }
 
   client.close()

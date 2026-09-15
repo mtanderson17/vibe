@@ -853,12 +853,12 @@ Shrinking. `tests/platform.test.ts` now covers `run_bash` and `launch_app`
 against the real shell on all three CI platforms, and the Settings accelerator
 branch. What's left genuinely needs a human, or an Electron runtime:
 
-- **Does the app even launch on macOS and Linux?** Nobody has run the GUI
-  there. CI proves typecheck, tests and `npm run build` pass; it never boots
-  Electron. One manual run on each would answer this faster than any
-  automation.
+- ~~Does the app even launch on macOS and Linux?~~ **Answered 2026-09-15: yes.**
+  The smoke job launches it on all three platforms in CI.
 - Menu-bar visibility on Windows and Linux after a keybinding change
-  (`electron/main/index.ts` hardcodes `autoHideMenuBar: false`)
+  (`electron/main/index.ts` hardcodes `autoHideMenuBar: false`) — the smoke job
+  could be extended to assert on the built menu rather than leaving this to a
+  human
 - Provider-chain fallback surfacing when the primary model fails — does the UI
   make it clear which model actually served the turn?
 - Merge against a stale branch ref, with the worktree deleted mid-flow
@@ -906,9 +906,19 @@ basis of the smoke job in the CI section below.
   workspace file content, so it isn't theoretical. Deliberately not folded into
   this upgrade — decide it separately once someone checks whether a patched
   Monaco has shipped.
-- The app has still only been **run** on Windows. CI proves typecheck, tests
-  and build on all three; nothing has launched it on macOS or Linux, where v38
-  (Wayland/GTK 4) and the v34 fullscreen menu-bar change are the open risks.
+**Resolved the same day: the app launches on all three platforms.** The new
+smoke job (see the CI section) confirmed it on macOS and Linux for the first
+time — window opens, renderer mounts, contextBridge intact. The Wayland/GTK 4
+concern from v38 did not materialise on the ubuntu runner.
+
+One finding from that: on the **Windows** runner, Electron 44 reliably logs two
+of its own startup errors into the renderer console —
+`sandboxed_renderer.bundle.js script failed to run` and a destructure of a null
+`binding.startupData`, both from `node:electron/js2c/sandbox_bundle`. Neither
+comes from our code and neither is fatal: the contextBridge check passes in the
+same run, so the preload works. The smoke test classifies renderer errors by
+origin and only fails on ours. Worth revisiting if Electron patches it, and
+worth suspicion if it ever starts appearing on other platforms.
 
 ### Original scoping, kept for the reasoning
 
@@ -979,12 +989,23 @@ CI runs typecheck + test + build on Linux/Windows/macOS
 there's nothing to publish until electron-builder config and signing certs
 exist. Adding the release job is part of #66.
 
-**Electron smoke job — deferred to #66, on purpose.** Booting the app in CI
-(xvfb on Linux) would cover window creation, menu construction, quit
-behaviour, the menu-bar item above, and the `safeStorage` gap. Deferred
-because at #66 there will be packaged artifacts, and smoke-testing the packaged
-app is strictly more valuable than smoke-testing `electron-vite preview` —
-otherwise the harness gets built twice and only the second one matters. The
-secondary reason: Electron-in-CI is flaky (xvfb, sandbox flags, GPU quirks,
-slow macOS runners), and a job that goes red at random trains everyone to
-ignore CI.
+**Electron smoke job — done 2026-09-15**, earlier than planned. It was deferred
+to #66 on the grounds that smoke-testing a *packaged* app is worth more than
+smoke-testing a dev build, and that Electron-in-CI is flaky. The first half
+still holds and the job should be re-pointed at the packaged artifacts when #66
+lands. The second turned out to be cheap to manage: the only instability was
+Electron logging its own startup errors on the Windows runner, fixed by
+classifying errors by origin.
+
+Building it early paid for itself immediately — it answered the
+longest-standing open question in this file (does the app run on macOS and
+Linux?) on its first run.
+
+`scripts/smoke.mjs` drives the app over the remote debugging port with Node's
+built-in `WebSocket`, so it needs no Playwright. It runs as a separate job from
+`check` because a red `check` should always mean real breakage.
+
+Still not covered even by the smoke job: `safeStorage` round-trips and menu
+construction. Both are reachable from here — the app is live and scriptable, so
+asserting on them is an extension of this script rather than new
+infrastructure.
