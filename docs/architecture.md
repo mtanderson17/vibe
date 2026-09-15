@@ -141,8 +141,22 @@ file. And comparing a path against a child's reported cwd needs
 temp dir is an 8.3 short path (`C:\Users\RUNNER~1\…`) that only the native call
 expands to the long form the child reports.
 
-What the suite still cannot reach is anything needing a live Electron runtime —
-`safeStorage`, menu construction, window creation. See BACKLOG.md.
+## Smoke test
+
+`npm run build && npm run smoke` launches the built app and checks it actually
+starts: window opens, renderer mounts DOM, a known screen renders, the
+contextBridge exposes `window.vibe`, and nothing logs an error. It drives
+Electron over its remote debugging port with Node's built-in `WebSocket`, so it
+needs no Playwright and no extra dependency. On Linux it needs a display:
+`xvfb-run -a npm run smoke`.
+
+This is the only thing that covers Electron booting at all — the unit suite
+structurally cannot. CI runs it on all three platforms as a separate job from
+`check`, deliberately: it's the most likely thing to be flaky, and a red
+`check` should always mean real breakage.
+
+What even the smoke test doesn't reach yet: `safeStorage` round-trips and menu
+construction. See BACKLOG.md.
 
 One sharp edge: `tsx` only applies a tsconfig's `compilerOptions` to files that
 config's `include` matches. The root `tsconfig.json` therefore carries

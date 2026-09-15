@@ -51,3 +51,40 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Does the app actually start? The check job proves modules behave and that
+  # the bundle builds; nothing there boots Electron, opens a window, or mounts
+  # the renderer. Until this existed, "it runs on macOS" was an assumption.
+  #
+  # Kept as its own job, one Node version per platform: it is the most likely
+  # thing here to be flaky, and a red `check` should always mean real breakage.
+  smoke:
+    name: smoke · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # Linux runners are headless, so Electron needs a virtual display.
+      - name: Smoke (Linux, under xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a --server-args="-screen 0 1400x900x24" npm run smoke
+
+      - name: Smoke
+        if: runner.os != 'Linux'
+        run: npm run smoke
